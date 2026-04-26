@@ -30,7 +30,8 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 9. [Troubleshooting](#9-troubleshooting)
 10. [Limitations](#10-limitations)
 11. [Project files](#11-project-files)
-12. [License](#12-license)
+12. [Contact](#12-contact)
+13. [License](#13-license)
 
 ---
 
@@ -232,7 +233,7 @@ Concretely:
 
 ## 7. Example gallery
 
-The snippets below are self-contained: drop any of them into a document with `\usepackage{dirtreex}` and they compile. For a much broader set of worked examples — every option, every combination, every edge case — see `use_case.tex` in the repository root.
+The snippets below are self-contained: drop any of them into a document with `\usepackage{dirtreex}` and they compile. For a much broader set of worked examples — every option, every combination, every edge case — see `dirtreex_examples.tex` in the repository root.
 
 ### 7.1 Defaults
 
@@ -379,18 +380,28 @@ If you have not changed anything that moves a break point, a single pass is enou
 | Path | What it is |
 | :--- | :--- |
 | `dirtreex.sty` | The package — a single self-contained file. |
-| `use_case.tex` | Worked examples covering the full feature surface. Compile with `lualatex use_case.tex` (twice, for `zref` to settle) to see every option in action. |
+| `dirtreex_examples.tex` | Worked examples covering the full feature surface. Compile with `lualatex dirtreex_examples.tex` (twice, for `zref` to settle) to see every option in action. |
 | `README.md` | This documentation. |
 | `LICENSE` | The LaTeX Project Public License 1.3c. |
 
 ---
 
-## 12. License
+## 12. Contact
 
-Released under the [LaTeX Project Public License, version 1.3c](https://www.latex-project.org/lppl.txt) (`LPPL-1.3c`); see [`LICENSE`](LICENSE) for the full text. Maintenance status is `author-maintained`; the Current Maintainer is CloudCauldron.
+- **Maintainer:** CloudCauldron
+- **Email:** <w.yizheng@qq.com>
+- **Repository / issues:** <https://github.com/CloudCauldron/dirtreex>
+
+Bug reports, feature suggestions, and patches are welcome via either channel.
 
 ---
 
-## 13. About the Development
+## 13. License
+
+Released under the [LaTeX Project Public License, version 1.3c](https://www.latex-project.org/lppl.txt) (`LPPL-1.3c`); see [`LICENSE`](LICENSE) for the full text. Maintenance status is `author-maintained`; the Current Maintainer is CloudCauldron (<w.yizheng@qq.com>).
+
+---
+
+## 14. About the Development
 
 This project includes code generated with the assistance of AI tools. All such code has been reviewed and integrated by the maintainer.
