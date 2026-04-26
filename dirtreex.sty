@@ -1,0 +1,1801 @@
+%% dirtreex.sty — Enhanced directory tree rendering with TikZ
+%% v1.0  2026/04/26
+%%
+%% Copyright (C) 2026 CloudCauldron <w.yizheng@qq.com>
+%% Repository: https://github.com/CloudCauldron/dirtreex
+%%
+%% This work may be distributed and/or modified under the
+%% conditions of the LaTeX Project Public License, either version
+%% 1.3c of this license or (at your option) any later version.
+%% The latest version of this license is in
+%%   https://www.latex-project.org/lppl.txt
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 2008 or later.
+%%
+%% This work has the LPPL maintenance status `author-maintained'.
+%% The Current Maintainer of this work is CloudCauldron.
+%%
+%% This work consists of the file dirtreex.sty.
+\NeedsTeXFormat{LaTeX2e}[2020/10/01]
+\ProvidesPackage{dirtreex}[2026/04/26 v1.0 Enhanced directory tree package]
+
+%% ------------------------------------------------------------
+%%  Engine requirement check.
+%%
+%%  This package relies on the e-TeX extensions (\numexpr,
+%%  \dimexpr, \ifcsname) throughout. Without them the code below
+%%  would produce cascading "undefined control sequence" errors,
+%%  so we stop immediately with a single clear message.
+%%
+%%  The error text deliberately avoids naming any \if-family
+%%  primitive: TeX's conditional-skipping scanner tracks \if
+%%  nesting even inside argument braces, so mentioning e.g.
+%%  \ifcsname inside the surrounding \ifx would unbalance it.
+\expandafter\ifx\csname numexpr\endcsname\relax
+  \PackageError{dirtreex}%
+    {e-TeX primitives required (e.g. \string\numexpr, \string\dimexpr)}%
+    {Compile with a TeX engine that provides e-TeX -- pdfTeX,
+     XeTeX, and LuaTeX all qualify. On LaTeX2e this is the
+     default; if you see this, you are likely running a very
+     old engine or an unusual format.}%
+\fi
+\expandafter\ifx\csname numexpr\endcsname\relax \endinput \fi
+
+\RequirePackage{tikz}
+\usetikzlibrary{backgrounds}
+\RequirePackage{xcolor}
+\RequirePackage{pgfkeys}
+\RequirePackage{zref-abspage}
+\RequirePackage{environ}
+\RequirePackage{xparse}
+
+\makeatletter
+
+%% ============================================================
+%%  Booleans
+%% ============================================================
+\newif\ifdte@showbox    \dte@showboxtrue
+\newif\ifdte@pagebreak  \dte@pagebreaktrue
+\newif\ifdte@splitflag
+%% True only while the body of a dirtreex environment is being
+%% captured.  \dir and \file read this flag to raise an immediate
+%% \PackageError at the call site when they are invoked outside
+%% the environment, rather than silently advancing global counters
+%% that the next environment's \dte@flush@state would then have
+%% to clean up.
+\newif\ifdte@inenv
+%% Raised (globally) whenever a \zref@extractdefault lookup for an
+%% entry's abspage falls back to the 0 default -- meaning the zref
+%% label has not yet been written to the .aux file. Consumed by
+%% the \AtEndDocument hook at the bottom of this file, which emits
+%% a single "Rerun LaTeX..." \PackageWarningNoLine so that latexmk
+%% and rerunfilecheck know to schedule another pass.
+\newif\ifdte@needrerun
+%% Raised by the `tree break at' pgfkeys handler so
+%% \dte@enforce@boxfalse@breakat can distinguish a user-supplied
+%% override (which must survive `box=false') from the package-default
+%% 1em that \dte@apply@breakat@defaults stamps on every env entry.
+%% Without this flag a user writing `[box=false]' would silently
+%% inherit `tree break at = 1em' (the box=true default) because the
+%% defaults macro runs before pgfkeys flips the showbox flag, leaving
+%% `tbA / tbB' = 1em with no way to tell `default' from `user'.
+%% Reset to false at every env entry; set true inside the `tree
+%% break at' handler.
+\newif\ifdte@tbset
+
+%% ============================================================
+%%  Counters
+%% ============================================================
+\newcount\dte@cnt         % number of entries in the current tree
+\newcount\dte@depth       % current nesting depth while capturing
+\newcount\dte@tnum        % tree index (one per environment instance)
+\newcount\dte@i           % general-purpose outer-loop counter
+\newcount\dte@j           % general-purpose inner-loop counter
+\newcount\dte@k           % general-purpose third-level counter
+\newcount\dte@scanidx     % linear entry scan index
+\newcount\dte@probeIdx    % active-line probe index
+\newcount\dte@pagecount   % pieces emitted so far in the current tree
+\newcount\dte@breakcount  % number of cross-page breaks detected
+\newcount\dte@piecenum    % 1-based index of the piece currently drawn
+
+%% ============================================================
+%%  Boxes
+%% ============================================================
+\newsavebox\dte@tbox  % per-entry text box (name + comment)
+
+%% ============================================================
+%%  Dimensions
+%% ============================================================
+\newdimen\dte@offset      \dte@offset=0.2em     % left gutter before every connector
+\newdimen\dte@width       \dte@width=1em        % horizontal arm of each `└` / `├`
+\newdimen\dte@sep         \dte@sep=0.2em        % gap between connector and entry text
+\newdimen\dte@rulewidth   \dte@rulewidth=0.4pt  % default line width for trunks/arms
+\newdimen\dte@all         % sum of \dte@offset + \dte@width + \dte@sep (per-depth stride)
+\newdimen\dte@bls         % tree's baselineskip, captured under the tree font
+\newdimen\dte@tempdim     % allocated scratch dimen, consumed in-statement
+\newdimen\dte@availht     % available height on the current page for a piece
+\newdimen\dte@elbowR      \dte@elbowR=0pt       % elbow-arc radius (0pt = sharp `└`/`├`)
+\newdimen\dte@ptE         % pass-through effective elbow radius (clamped connE)
+\newdimen\dte@ptRaise     % pass-through upper-half raise
+\newdimen\dte@ptH         % pass-through vrule height scratch
+\newdimen\dte@scratch     % general-purpose allocated scratch dimen
+\newcount\dte@scratchcnt  % general-purpose allocated scratch count
+\newdimen\dte@leader@dim  % leader space prepended to every non-first piece
+\newdimen\dte@contentwd   % configured content-area width (framebox hsize)
+
+\newbox\dte@framebox      % the tree as a single vbox, before splitting
+\newbox\dte@splitresult   % one \vsplit chunk of the above
+\newbox\dte@extbox        % reserved for extension drawing
+
+%% ============================================================
+%%  Style defaults
+%% ============================================================
+\def\dte@fontsize{\small}
+\def\dte@textstyle{\ttfamily}
+\def\dte@commentstyle{\rmfamily}
+
+\def\dte@bordercolor{black}
+\def\dte@borderwidth{0.4pt}
+\def\dte@bgcolor{white}
+%% Frame corner radii: top-left, top-right, bottom-right, bottom-left.
+\def\dte@cTL{0pt}\def\dte@cTR{0pt}
+\def\dte@cBR{0pt}\def\dte@cBL{0pt}
+%% Frame padding (inner margin): top, right, bottom, left.
+\def\dte@padT{6pt}\def\dte@padR{6pt}
+\def\dte@padB{6pt}\def\dte@padL{6pt}
+
+%% Break-at distances applied to every page break.
+%%   bbA = first-piece bottom offset above the break line.
+%%   bbB = second-piece top offset below the break line.
+%%   tbA / tbB play the same role for tree-extension vrules.
+%% Defaults are applied per environment by
+%% \dte@apply@breakat@defaults (see environment open).
+
+\def\dte@linecolor{black}
+
+%% ============================================================
+%%  pgfkeys — option interface
+%% ============================================================
+%% Parse a strict 1-or-4 comma-separated value list.
+%%   Usage: \dte@parsefour{val or v1,v2,v3,v4}\macA\macB\macC\macD
+%% A single value is broadcast to all four outputs; four values are
+%% distributed in order. Any other arity (2, 3, >=5) raises a
+%% \PackageError so malformed user input is reported instead of
+%% silently corrupting the layout.
+\def\dte@pf@sentinel{\dte@pf@SENTINEL}%
+\def\dte@parsefour#1#2#3#4#5{%
+  \dte@pf@do#1,\dte@pf@sentinel,\dte@pf@sentinel,\dte@pf@sentinel,%
+    \dte@pf@sentinel\dte@pf@end{#2}{#3}{#4}{#5}%
+}
+\def\dte@pf@do#1,#2,#3,#4,#5\dte@pf@end#6#7#8#9{%
+  \def\dte@pf@tA{#2}%
+  \def\dte@pf@sOne{\dte@pf@sentinel}%
+  \ifx\dte@pf@tA\dte@pf@sOne
+    % Exactly one value supplied: #2 is the lone sentinel.
+    \def#6{#1}\def#7{#1}\def#8{#1}\def#9{#1}%
+  \else
+    \def\dte@pf@tB{#5}%
+    \def\dte@pf@sFour{\dte@pf@sentinel,\dte@pf@sentinel,\dte@pf@sentinel,\dte@pf@sentinel}%
+    \ifx\dte@pf@tB\dte@pf@sFour
+      % Exactly four values supplied: #5 is the four-sentinel tail.
+      \def#6{#1}\def#7{#2}\def#8{#3}\def#9{#4}%
+    \else
+      \PackageError{dirtreex}%
+        {parsefour expects 1 or 4 comma-separated values}%
+        {Provide either one value (applied to all four sides)
+         or four values (TL,TR,BR,BL).}%
+      \def#6{0pt}\def#7{0pt}\def#8{0pt}\def#9{0pt}%
+    \fi
+  \fi
+}
+%% Parse a strict 1-or-2 comma-separated value list (sibling of
+%% \dte@parsefour).
+%%   Usage: \dte@parsetwo{val or v1,v2}\macA\macB
+%% A single value is broadcast to both outputs; two values are
+%% distributed in order. Any other arity (3, >=4) raises a
+%% \PackageError.
+\def\dte@pt@sentinel{\dte@pt@SENTINEL}%
+\def\dte@parsetwo#1#2#3{%
+  \dte@pt@do#1,\dte@pt@sentinel,\dte@pt@sentinel\dte@pt@end{#2}{#3}%
+}
+\def\dte@pt@do#1,#2,#3\dte@pt@end#4#5{%
+  \def\dte@pt@tA{#2}%
+  \def\dte@pt@sOne{\dte@pt@sentinel}%
+  \ifx\dte@pt@tA\dte@pt@sOne
+    % Exactly one value supplied: #2 is the lone sentinel.
+    \def#4{#1}\def#5{#1}%
+  \else
+    \def\dte@pt@tB{#3}%
+    \def\dte@pt@sTwo{\dte@pt@sentinel,\dte@pt@sentinel}%
+    \ifx\dte@pt@tB\dte@pt@sTwo
+      % Exactly two values supplied: #3 is the two-sentinel tail.
+      \def#4{#1}\def#5{#2}%
+    \else
+      \PackageError{dirtreex}%
+        {parsetwo expects 1 or 2 comma-separated values}%
+        {Provide either one value (applied to both sides) or
+         two values (first-piece-bottom, next-piece-top).}%
+      \def#4{0pt}\def#5{0pt}%
+    \fi
+  \fi
+}
+
+\pgfkeys{
+  /dte/.cd,
+  fontsize/.code={\def\dte@fontsize{#1}},
+  %% --- frame box ---
+  box/.code={\pgfkeys{/dte/box/.cd,#1}},
+  /dte/box/.cd,
+  true/.code={\dte@showboxtrue},
+  false/.code={\dte@showboxfalse},
+  corners/.code={\dte@parsefour{#1}\dte@cTL\dte@cTR\dte@cBR\dte@cBL},
+  border color/.store in=\dte@bordercolor,
+  border width/.store in=\dte@borderwidth,
+  background color/.store in=\dte@bgcolor,
+  margin/.code={\dte@parsefour{#1}\dte@padT\dte@padR\dte@padB\dte@padL},
+  %% --- page break behaviour ---
+  /dte/.cd,
+  pagebreak/.code={\pgfkeys{/dte/pagebreak/.cd,#1}},
+  /dte/pagebreak/.cd,
+  true/.code={\dte@pagebreaktrue},
+  false/.code={\dte@pagebreakfalse},
+  box break at/.code={%
+    \dte@parsetwo{#1}\dte@bbA\dte@bbB
+    \edef\dte@bbA{\the\dimexpr\dte@bbA\relax}%
+    \edef\dte@bbB{\the\dimexpr\dte@bbB\relax}%
+  },
+  tree break at/.code={%
+    \dte@parsetwo{#1}\dte@tbA\dte@tbB
+    \edef\dte@tbA{\the\dimexpr\dte@tbA\relax}%
+    \edef\dte@tbB{\the\dimexpr\dte@tbB\relax}%
+    \dte@tbsettrue
+  },
+  %% --- line style ---
+  /dte/.cd,
+  line color/.store in=\dte@linecolor,
+  line width/.code={\dte@rulewidth=#1\relax},
+  %% --- elbow shape ---
+  %% A single key controls the elbow geometry: 0pt (the default)
+  %% produces sharp `└`/`├` right angles; any positive length gives
+  %% a rounded arc of that radius. The dispatch in
+  %% \dte@draw@connector reads the resolved dimen directly.
+  elbow radius/.code={\dte@elbowR=#1\relax},
+  %% --- per-entry style overrides (consumed by \dir[...] / \file[...]) ---
+  /dte/entry/.cd,
+  line color/.code={\gdef\dte@tmp@entry@lc{#1}},
+  line width/.code={\gdef\dte@tmp@entry@lw{#1}},
+  elbow radius/.code={\gdef\dte@tmp@entry@er{#1}},
+}
+
+%% ============================================================
+%%  State lifecycle
+%% ============================================================
+%% Clear every per-entry and per-break global left over from a
+%% previous dirtreex environment. Must run BEFORE \dte@cnt and
+%% \dte@breakcount are reset to zero at the start of a new
+%% environment, because the loops below use those counters as
+%% their upper bound.
+%%
+%% Also clears the per-entry render-time anchor cache
+%% \dte@pos@<N>, written by \dte@render@root / \dte@render@entry.
+%% That family is unique among the package's scratch slots in that
+%% its index range grows with the entry count of the largest tree
+%% seen so far, so leaving it uncleaned would let the macro hash
+%% table accumulate one stale slot per max(N) across the document.
+\def\dte@flush@state{%
+  \ifnum\dte@cnt>0
+    \dte@i=1\relax
+    \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i d\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i n\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i c\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i t\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i l\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i a\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i lc\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i lw\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i er\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@pos@\the\dte@i\endcsname\relax
+      \advance\dte@i by 1\relax
+    \repeat
+  \fi
+  \ifnum\dte@breakcount>0
+    \dte@i=1\relax
+    \loop\ifnum\dte@i<\numexpr\dte@breakcount+1\relax
+      \expandafter\global\expandafter\let
+        \csname dte@breaklines@\the\dte@i\endcsname\relax
+      \expandafter\global\expandafter\let
+        \csname dte@breakidx@\the\dte@i\endcsname\relax
+      \advance\dte@i by 1\relax
+    \repeat
+  \fi
+}
+
+%% ------------------------------------------------------------
+%%  Expansion-safe accessor for csname-keyed slots that
+%%  \dte@flush@state may have left as \let \relax.
+%%
+%%  \ifcsname is true for both `defined' and `let \relax', so a
+%%  raw \edef\foo{\csname slot\endcsname} can store the literal
+%%  token \relax when the slot has been cleaned but not yet
+%%  re-populated. Downstream consumers (\@for, \ifnum,
+%%  \dimexpr) then trip a `Missing number' error.
+%%
+%%  Use this accessor in any expansion-time read of a slot whose
+%%  producer might not have run yet on the current pass.
+%%  Returns \@empty when the slot is undefined or \relax,
+%%  otherwise expands once to the slot's stored tokens.
+\def\dte@safeget#1{%
+  \expandafter\ifx\csname #1\endcsname\relax \@empty
+  \else \csname #1\endcsname \fi}
+
+%% To extract the captured \baselineskip out of the framebox vbox,
+%% the package uses a simple \global assignment rather than a brittle \aftergroup
+%% token-chain trick. A token-chain approach (ejecting `\dte@bls = <dim> \relax`)
+%% would be overly fragile, depending on \the producing default catcodes
+%% and risking scope collisions with \let \relax.
+%%
+%% By using \global\dte@bls = \baselineskip (see the dirtreex env body),
+%% the code keeps the logic robust. \dte@bls is a \newdimen register that is
+%% naturally re-assigned by the next environment, requiring no explicit flush.
+
+%% ============================================================
+%%  Entry storage
+%% ============================================================
+%% Each entry is stored as a family of csname'd macros keyed by
+%% its 1-based index N and a single-letter field suffix:
+%%   d = depth, n = name, c = comment, t = type (1=dir, 0=file),
+%%   l = is-last-child flag, a = active-depth list,
+%%   lc = line colour override, lw = line width override,
+%%   er = elbow-radius override.
+%% Depth and type are \xdef'd (they are numeric literals and
+%% safe to expand); the remaining textual fields are \gdef'd to
+%% preserve any unexpanded tokens the user supplied.
+\def\dte@estore#1#2#3#4#5{%
+  \expandafter\xdef\csname dte@e#1d\endcsname{#2}%
+  \expandafter\gdef\csname dte@e#1n\endcsname{#3}%
+  \expandafter\gdef\csname dte@e#1c\endcsname{#4}%
+  \expandafter\xdef\csname dte@e#1t\endcsname{#5}%
+}
+\def\dte@eget#1#2{\csname dte@e#1#2\endcsname}
+
+%% Parse the optional bracketed style block of a \dir[...] or
+%% \file[...] call and bind the three per-entry override slots.
+%%   #1 = option string, #2 = entry index.
+%% The three slots always exist after this call (possibly empty),
+%% which simplifies downstream retrieval.
+\def\dte@store@entry@opts#1#2{%
+  \gdef\dte@tmp@entry@lc{}\gdef\dte@tmp@entry@lw{}\gdef\dte@tmp@entry@er{}%
+  \def\dte@tmp@opts{#1}%
+  \ifx\dte@tmp@opts\@empty\else
+    \pgfkeys{/dte/entry/.cd,#1}%
+  \fi
+  \expandafter\xdef\csname dte@e#2lc\endcsname{\dte@tmp@entry@lc}%
+  \expandafter\xdef\csname dte@e#2lw\endcsname{\dte@tmp@entry@lw}%
+  \expandafter\xdef\csname dte@e#2er\endcsname{\dte@tmp@entry@er}%
+}
+
+%% ============================================================
+%%  \dir / \file  (public API, with optional per-entry style)
+%% ============================================================
+\NewDocumentCommand{\dir}{O{} m m +m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\dir\space used outside dirtreex environment}%
+      {Every \string\dir\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{1}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  % Advance \dte@depth for children, scoped to a local group so
+  % \endgroup restores it automatically even if an error occurs
+  % inside #4. The parent's depth has already been captured by
+  % \dte@estore above, so each child's \the\dte@depth reads the
+  % group-local advanced value while every stored depth remains
+  % frozen at its original call-time value.
+  \begingroup
+    \advance\dte@depth by 1\relax
+    #4%
+  \endgroup
+}
+
+\NewDocumentCommand{\file}{O{} m m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\file\space used outside dirtreex environment}%
+      {Every \string\file\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{0}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+}
+
+%% ============================================================
+%%  Preprocessing (runs after the body is captured)
+%% ============================================================
+\def\dte@preprocess{%
+  \dte@i=1\relax
+  \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+    \dte@computelast{\the\dte@i}%
+    \advance\dte@i by 1\relax
+  \repeat
+  \dte@computeactive
+}
+
+%% ------------------------------------------------------------
+%%  Is-last-child flag.
+%%
+%%  Scans forward from entry #1; entry is "last child" iff no
+%%  subsequent entry at the same depth exists before the scan
+%%  encounters a strictly shallower depth (which marks leaving
+%%  the subtree).
+\def\dte@computelast#1{%
+  \edef\dte@cld{\dte@eget{#1}{d}}%
+  \expandafter\xdef\csname dte@e#1l\endcsname{1}%
+  \dte@scanidx=#1\relax
+  \dte@cll@loop{#1}%
+}
+\def\dte@cll@loop#1{%
+  \advance\dte@scanidx by 1\relax
+  \ifnum\dte@scanidx>\dte@cnt\relax\else
+    \edef\dte@nxtd{\dte@eget{\the\dte@scanidx}{d}}%
+    \ifnum\dte@nxtd=\dte@cld\relax
+      % Sibling found -> NOT last child.
+      \expandafter\xdef\csname dte@e#1l\endcsname{0}%
+    \else
+      \ifnum\dte@nxtd>\dte@cld\relax
+        \dte@cll@loop{#1}%
+      \fi
+    \fi
+  \fi
+}
+
+%% ------------------------------------------------------------
+%%  Active vertical lines at each entry.
+%%
+%%  For every entry, compute the list of ancestor depths at
+%%  which a vertical trunk should be drawn -- i.e. depths that
+%%  still have a future sibling to connect to. Stored per entry
+%%  as a comma-separated list in \dte@e<N>a. Stored without a
+%%  leading comma so every downstream \@for iteration sees a
+%%  real element (no empty first iteration to guard against).
+\def\dte@computeactive{%
+  \dte@i=1\relax
+  \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+    \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{}%
+    \edef\dte@cad{\dte@eget{\the\dte@i}{d}}%
+    \dte@j=1\relax
+    \dte@ca@depthloop
+    \advance\dte@i by 1\relax
+  \repeat
+}
+\def\dte@ca@depthloop{%
+  \ifnum\dte@j>\dte@cad\relax\else
+    \dte@ca@probe{\the\dte@j}%
+    \advance\dte@j by 1\relax
+    \expandafter\dte@ca@depthloop
+  \fi
+}
+\def\dte@ca@probe#1{%
+  \dte@probeIdx=\dte@i\relax
+  \dte@ca@probe@loop{#1}%
+}
+\def\dte@ca@probe@loop#1{%
+  \advance\dte@probeIdx by 1\relax
+  \ifnum\dte@probeIdx>\dte@cnt\relax\else
+    \edef\dte@pd{\dte@eget{\the\dte@probeIdx}{d}}%
+    \ifnum\dte@pd=#1\relax
+      % Sibling found at this depth -> active. Store bare on the
+      % first append, or concatenate with a leading comma on every
+      % subsequent append. This keeps \dte@e<N>a free of a leading
+      % comma so consumers never need an empty-first-iteration guard.
+      \expandafter\ifx\csname dte@e\the\dte@i a\endcsname\@empty
+        \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{#1}%
+      \else
+        \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{%
+          \csname dte@e\the\dte@i a\endcsname,#1}%
+      \fi
+    \else
+      \ifnum\dte@pd<#1\relax
+        % Left the subtree at this depth -> not active.
+      \else
+        \dte@ca@probe@loop{#1}%
+      \fi
+    \fi
+  \fi
+}
+
+%% ============================================================
+%%  Rendering helpers
+%% ============================================================
+%% ------------------------------------------------------------
+%%  Public extension hook: \DirtreexFormatName
+%%
+%%  Receives the 1-based entry index as #1. The default
+%%  expansion is the stored name (slot `n') followed by a
+%%  trailing `/' for directories (slot `t' = 1).
+%%
+%%  Users may \renewcommand this to inject icons, glyphs, or
+%%  styling around the entry name. The replacement runs inside
+%%  the row's name vbox under \dte@textstyle and must respect
+%%  the row's \hsize and the \strut already inserted by the
+%%  caller; otherwise vertical alignment between the name and
+%%  its connector will drift.
+%%
+%%  This is a SEMVER-STABLE PUBLIC SURFACE. The package is
+%%  committed to:
+%%    - keeping \DirtreexFormatName's argument convention
+%%      (single 1-based index) across minor versions;
+%%    - keeping \dte@eget{#1}{n} and \dte@eget{#1}{t} stable
+%%      enough that a user override built around them keeps
+%%      compiling.
+%%  Internal slot names beyond `n' / `t' are NOT part of the
+%%  public surface; users overriding this hook should rely only
+%%  on `n' and `t' if they want forward compatibility.
+\newcommand{\DirtreexFormatName}[1]{%
+  \dte@eget{#1}{n}%
+  \ifnum\dte@eget{#1}{t}=1 /\fi
+}
+%% Internal renamer. All package-internal call sites keep going
+%% through \dte@format@name so a user-side \renewcommand on
+%% \DirtreexFormatName is the single point of truth.
+\def\dte@format@name#1{\DirtreexFormatName{#1}}
+%% Emit the comment half of an entry row. A single-line comment
+%% (or a comment short enough not to wrap) is emitted as
+%%   \dotfill <comment>
+%% so the dot leader fills the gap between the name's right edge
+%% and the comment's left edge; the comment then lands flush-right
+%% under the row's \hsize because \dotfill's \hfill (level-3
+%% stretch) dominates the default \parfillskip (level-2 stretch).
+%%
+%% A multi-line comment (one that contains \\ or wraps naturally)
+%% needs the same right-flush treatment on every physical line, not
+%% just the first. We achieve this by locally redefining \\ inside
+%% the commentstyle group so that each forced break additionally
+%% emits an \hfill at the start of the next line. That \hfill is
+%% level-3 stretch and therefore dominates \parfillskip on the final
+%% line too, so the whole comment block forms a ragged-LEFT rectangle
+%% flush against the row's right edge.
+%%
+%% The local redefinition expands \\ to \@normalcr (the standard
+%% LaTeX text-mode line break) followed by \null\hfill\ignorespaces.
+%% We invoke \@normalcr directly rather than \let-saving and
+%% replaying the call-site meaning of \\. The latter (replaying
+%% whatever \\ meant at the call site) broke inside tabular / array
+%% / eqnarray nesting: there the user's \\ is locally \@arraycr, and
+%% replaying \@arraycr from the comment's interior emitted
+%% `Misplaced \cr' because the alignment in scope was the
+%% surrounding tabular row, not the comment. Forcing \@normalcr
+%% here makes the line break a paragraph line break regardless of
+%% what the surrounding environment has done to \\. Known
+%% limitation: a user-written \\[length] form is not honoured (the
+%% [length] argument is consumed as text after the line break);
+%% this matches the pre-fix behaviour and is not a regression.
+%%
+%% We \let (not \edef) the stored slot into \dte@ctmp so the raw
+%% \\ token survives to emission time, where our local redefinition
+%% is in effect. The \ifx \@empty guard still fires on empty
+%% comments because \let of an empty macro preserves that meaning.
+%%
+%% Subtlety: TeX's paragraph builder discards glue and penalties at
+%% the start of a line after a forced break. A bare \hfill right
+%% after \\ would therefore be dropped on the new line, leaving the
+%% continuation flush-LEFT as in the pre-fix rendering. We insert a
+%% zero-width \null (an empty hbox, non-discardable) before the
+%% \hfill so the stretch survives to push the content right.
+\def\dte@format@comment#1{%
+  \expandafter\let\expandafter\dte@ctmp\csname dte@e#1c\endcsname
+  \ifx\dte@ctmp\@empty\else
+    \dotfill{\dte@commentstyle%
+      \def\\{\@normalcr\null\hfill\ignorespaces}%
+      \dte@ctmp\strut}%
+  \fi
+}
+
+%% ------------------------------------------------------------
+%%  Resolve the current entry's line colour and line width.
+%%
+%%  Both slots are bound via \expandafter\let\expandafter rather
+%%  than \edef, so stored colour macros (e.g. a user-defined
+%%  \mycolor from \newcommand) are carried as a token reference
+%%  instead of being prematurely expanded -- which would break
+%%  xcolor expressions built from non-\protected primitives.
+%%
+%%  Two guards per slot cover both "undefined" (\csname returns
+%%  \relax under e-TeX) and "defined but empty"; both fall back
+%%  to the environment-level defaults.
+%% Resolve the per-entry line-colour override for entry #1 into
+%% the local control sequence #2. Falls back to the env-level
+%% \dte@linecolor when the slot is undefined, \let \relax, or
+%% \@empty. The two-step \expandafter\let\expandafter chain
+%% avoids prematurely expanding user-defined colour macros.
+\def\dte@resolve@lc#1#2{%
+  \expandafter\let\expandafter#2\csname dte@e#1lc\endcsname
+  \ifx#2\relax  \let#2\dte@linecolor \fi
+  \ifx#2\@empty \let#2\dte@linecolor \fi
+}
+%% Resolve the per-entry line-width override for entry #1 into
+%% the local control sequence #2. Falls back to the env-level
+%% \the\dte@rulewidth (an absolute dimen-literal token sequence)
+%% on undefined / \relax / empty slots.
+\def\dte@resolve@lw#1#2{%
+  \expandafter\let\expandafter#2\csname dte@e#1lw\endcsname
+  \ifx#2\relax  \edef#2{\the\dte@rulewidth}\fi
+  \ifx#2\@empty \edef#2{\the\dte@rulewidth}\fi
+}
+\def\dte@resolve@style#1{%
+  \dte@resolve@lc{#1}\dte@cur@lc
+  \dte@resolve@lw{#1}\dte@cur@lw
+}
+
+%% ------------------------------------------------------------
+%%  Connector drawing (dispatches sharp / rounded variants).
+%%
+%%  Dedicated dimens so that nested \color / TikZ calls cannot
+%%  clobber an in-flight scratch value before it is consumed.
+\newdimen\dte@connV   % vertical height of the connector's upper stem
+\newdimen\dte@connR   % raise above baseline (0.2\baselineskip)
+\newdimen\dte@connE   % effective elbow radius after clamping
+
+\def\dte@draw@connector#1{%
+  % #1 = entry index. The caller has already stored the desired
+  % vertical height in \dte@scratch; copy it into a dedicated
+  % register because subsequent \color / TikZ calls may reuse
+  % scratch dimens internally.
+  \dte@connV=\dte@scratch\relax
+  \dte@connR=0.2\baselineskip\relax
+  %
+  % Retrieve the per-entry elbow-radius override. Three branches:
+  %   \relax  -> slot undefined (e-TeX semantics for unset \csname)
+  %              fall through to the env-level \dte@elbowR.
+  %   \@empty -> slot defined but empty; same default.
+  %   else    -> use the stored override.
+  \expandafter\let\expandafter\dte@cur@er\csname dte@e#1er\endcsname
+  \ifx\dte@cur@er\relax
+    \dte@connE=\dte@elbowR
+  \else\ifx\dte@cur@er\@empty
+    \dte@connE=\dte@elbowR
+  \else
+    \dte@connE=\dte@cur@er\relax
+  \fi\fi
+  %
+  \ifdim\dte@connE>0pt\relax
+    \dte@connector@rounded
+  \else
+    \dte@connector@sharp
+  \fi
+}
+
+%% Sharp connector: the vertical extends down to meet the
+%% horizontal's bottom edge, and the horizontal starts at the
+%% vertical's right edge, producing a seamless `└` at any width.
+\def\dte@connector@sharp{%
+  {\color{\dte@cur@lc}%
+   \dte@rulewidth=\dte@cur@lw\relax
+   \raise\dte@connR\hbox to 0pt{%
+     \kern-0.5\dte@rulewidth
+     \vrule width\dte@rulewidth
+            height\dte@connV
+            depth 0.5\dte@rulewidth\relax
+     \hss
+   }%
+   \raise\dte@connR\hbox{%
+     \kern 0.5\dte@rulewidth
+     \vrule width\dimexpr\dte@width-0.5\dte@rulewidth\relax
+            height 0.5\dte@rulewidth
+            depth  0.5\dte@rulewidth
+   }%
+  }%
+}
+
+%% ------------------------------------------------------------
+%%  Clamp the dimen named in #1 against the elbow-radius
+%%  geometry invariants (width and half-baseline upper bounds,
+%%  plus a tighter 0.2\baselineskip bound when \dte@splitflag
+%%  is true). The \dte@connV clamp is NOT applied here -- the
+%%  rounded connector applies it explicitly just before invoking
+%%  this helper, since pass-through and connector paths have
+%%  different connV semantics.
+\def\dte@clampelbow#1{%
+  \ifdim#1>\dte@width            #1=\dte@width             \fi
+  \ifdim#1>0.5\baselineskip      #1=0.5\baselineskip       \fi
+  \ifdte@splitflag
+    \ifdim#1>0.2\baselineskip    #1=0.2\baselineskip       \fi
+  \fi
+}
+
+\def\dte@connector@rounded{%
+  % Clamp the elbow radius to what is geometrically available.
+  % The connV clamp stays inline (it is caller-specific); every
+  % other invariant goes through \dte@clampelbow so the connector
+  % and pass-through paths share one source of truth.
+  \ifdim\dte@connE>\dte@connV \dte@connE=\dte@connV \fi
+  \dte@clampelbow\dte@connE
+  \raise\dte@connR\hbox{%
+    \tikz[x=1pt,y=1pt,baseline=0pt]{%
+      \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
+      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round]
+        (0,\strip@pt\dte@connV) -- (0,\strip@pt\dte@connE)
+        arc[start angle=180,end angle=270,radius=\strip@pt\dte@connE]
+        -- (\strip@pt\dte@width,0);%
+    }%
+  }%
+}
+
+%% ------------------------------------------------------------
+%%  Find the next entry at depth #2 that lies strictly after
+%%  entry #1. Matches the subtree semantics of
+%%  \dte@ca@probe@loop: scan forward while depth > #2; stop at
+%%  depth = #2 (sibling found) or depth < #2 (left the subtree).
+%%  The result is stored in the global \dte@nextidx (0 if none).
+\def\dte@find@nextsibling#1#2{%
+  \gdef\dte@nextidx{0}%
+  \dte@scanidx=#1\relax
+  \dte@fn@loop{#2}%
+}
+\def\dte@fn@loop#1{%
+  \advance\dte@scanidx by 1\relax
+  \ifnum\dte@scanidx>\dte@cnt\relax\else
+    \edef\dte@fnd{\dte@eget{\the\dte@scanidx}{d}}%
+    \ifnum\dte@fnd=#1\relax
+      \xdef\dte@nextidx{\the\dte@scanidx}%
+    \else
+      \ifnum\dte@fnd>#1\relax
+        \dte@fn@loop{#1}%
+      \fi
+    \fi
+  \fi
+}
+
+%% ------------------------------------------------------------
+%%  Pass-through vertical lines at active depths.
+%%
+%%  A pass-through segment is the stretch of the vertical trunk
+%%  that runs between two siblings at a given depth. By
+%%  convention each entry owns only its own `└`-shape (upper
+%%  stem + horizontal arm); the column continuing DOWN from that
+%%  horizontal toward the next sibling belongs to that next
+%%  sibling. So the lower half of every pass-through segment
+%%  (below the horizontal-arm level) adopts the line style of
+%%  the NEXT sibling at that depth.
+%%
+%%  At the current entry's OWN depth the segment is split at
+%%  arc-top (0.2 bls + elbow-radius above the baseline):
+%%    * upper half (row-top down to arc-top) uses the entry's
+%%      own colour;
+%%    * lower half (arc-top down through the row) uses the next
+%%      sibling's colour, so the seam lands exactly where the
+%%      rounded arc curves off the column.
+%%  Splitting at arm-level instead would leave an own-colour
+%%  stub visible between arc-top and arm-level -- i.e. a small
+%%  coloured peg sitting inside the arc's concavity. For sharp
+%%  connectors connE is zero, so this reduces to "split at arm
+%%  level" and matches the historical behaviour exactly.
+\def\dte@draw@passthrough#1{%
+  \edef\dte@save@tempdim{\the\dte@tempdim}%
+  \edef\dte@actlist{\dte@safeget{dte@e#1a}}%
+  \edef\dte@ownd{\dte@eget{#1}{d}}%
+  % Resolve the entry's effective elbow radius. This mirrors the
+  % clamping in \dte@connector@rounded so the passthrough's
+  % colour split aligns with the actual arc top drawn later:
+  % connE is bounded by connV (0.2 bls when splitflag is true,
+  % 0.5 bls otherwise) and by 0.5 bls.
+  \expandafter\let\expandafter\dte@pt@er\csname dte@e#1er\endcsname
+  \ifx\dte@pt@er\relax
+    \dte@ptE=\dte@elbowR
+  \else\ifx\dte@pt@er\@empty
+    \dte@ptE=\dte@elbowR
+  \else
+    \dte@ptE=\dte@pt@er\relax
+  \fi\fi
+  \dte@clampelbow\dte@ptE
+  \@for\dte@alvl:=\dte@actlist\do{%
+    % \dte@actlist is built without a leading comma (see
+    % \dte@ca@probe@loop), so every iteration here sees a real
+    % active-depth value.
+    \dte@k=\dte@alvl\relax
+    \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
+    % Style source for this column = the next sibling at this
+    % active depth (the entry whose elbow the line leads into).
+    \dte@find@nextsibling{#1}{\the\dte@k}%
+    \let\dte@pt@src\dte@nextidx
+    \dte@resolve@lc{\dte@pt@src}\dte@pt@lc
+    \dte@resolve@lw{\dte@pt@src}\dte@pt@lw
+    \ifnum\dte@k=\dte@ownd\relax
+      % Own-depth column. Split the column at arc-top
+      % (baseline + 0.2 bls + connE):
+      %   upper half -> row-top down to arc-top, in entry's
+      %                 own colour;
+      %   lower half -> arc-top down through the row, in the
+      %                 next sibling's colour.
+      \dte@resolve@lc{#1}\dte@pt@own@lc
+      \dte@resolve@lw{#1}\dte@pt@own@lw
+      % Upper half: from row top down to arc-top.
+      %   raise = 0.2 bls + connE,  h = 0.5 bls - connE,  d = 0pt.
+      \dte@ptRaise=0.2\baselineskip
+      \advance\dte@ptRaise by\dte@ptE\relax
+      \dte@ptH=0.5\baselineskip
+      \advance\dte@ptH by-\dte@ptE\relax
+      \hbox to 0pt{%
+        \kern\dte@tempdim\relax
+        \hbox to 0pt{%
+          \raise\dte@ptRaise\hbox{%
+            {\color{\dte@pt@own@lc}%
+             \dte@rulewidth=\dte@pt@own@lw\relax
+             \kern-0.5\dte@rulewidth
+             \vrule width\dte@rulewidth
+                    height\dte@ptH
+                    depth  0pt\relax
+             \kern-0.5\dte@rulewidth
+            }%
+          }%
+          \hss
+        }%
+        \hss
+      }%
+      % Lower half: from arc-top down to row bottom.
+      %   raise = 0,  h = 0.2 bls + connE,  d = 0.3 bls.
+      \dte@ptH=0.2\baselineskip
+      \advance\dte@ptH by\dte@ptE\relax
+      \hbox to 0pt{%
+        \kern\dte@tempdim\relax
+        \hbox to 0pt{%
+          {\color{\dte@pt@lc}%
+           \dte@rulewidth=\dte@pt@lw\relax
+           \kern-0.5\dte@rulewidth
+           \vrule width\dte@rulewidth
+                  height\dte@ptH
+                  depth  0.3\baselineskip\relax
+           \kern-0.5\dte@rulewidth
+          }%
+          \hss
+        }%
+        \hss
+      }%
+    \else
+      % Pure pass-through column: no elbow at this depth in this
+      % row, draw the full-row vrule in the next sibling's style.
+      \hbox to 0pt{%
+        \kern\dte@tempdim\relax
+        \hbox to 0pt{%
+          {\color{\dte@pt@lc}%
+           \dte@rulewidth=\dte@pt@lw\relax
+           \kern-0.5\dte@rulewidth
+           \vrule width\dte@rulewidth
+                  height 0.7\baselineskip
+                  depth  0.3\baselineskip\relax
+           \kern-0.5\dte@rulewidth
+          }%
+          \hss
+        }%
+        \hss
+      }%
+    \fi
+  }%
+  \dte@tempdim=\dte@save@tempdim\relax
+}
+
+%% ============================================================
+%%  Main rendering
+%% ============================================================
+%% Horizontal stride per active depth = offset + width + sep.
+%% Used by \dte@render@tree and by the dirtreex env body to
+%% pin the per-row geometry; both call sites must agree, so
+%% extracted here to keep the formula in one place.
+\def\dte@compute@stride{%
+  \dte@all=\dte@offset
+  \advance\dte@all by\dte@width
+  \advance\dte@all by\dte@sep
+}
+\def\dte@render@tree{%
+  % Save \parindent / \parskip / \baselineskip / \strut so we
+  % can restore the surrounding document's paragraph metrics on
+  % exit. Inside the tree we pin baselineskip to \dte@bls (the
+  % captured value under the tree's own font) and use a fixed
+  % \strut with explicit height/depth so every row has the same
+  % 0.7 bls / 0.3 bls partition regardless of inherited metrics.
+  \edef\dte@sav@pi{\the\parindent}%
+  \edef\dte@sav@ps{\the\parskip}%
+  \edef\dte@sav@bls{\the\baselineskip}%
+  \let\dte@sav@strut\strut
+  %
+  \parindent=0pt\relax
+  \parskip=0pt\relax
+  \baselineskip=\dte@bls\relax
+  %% Interline-glue policy. With \lineskiplimit=0pt and
+  %% \lineskip=0pt, TeX's per-line rule -- "glue = \baselineskip
+  %% - \prevdepth - \ht(new); if glue >= \lineskiplimit use it,
+  %% else use \lineskip" -- gives, for line ht/dp clamped at the
+  %% standard 0.7 bls / 0.3 bls partition (see \smash overrides
+  %% just below):
+  %%   single-line row (dp=0.3 bls) -> single-line row (ht=0.7 bls):
+  %%     glue = bls - 0.3 bls - 0.7 bls = 0pt;  0pt >= 0pt, use 0pt;
+  %%     stride = 0.3 bls + 0 + 0.7 bls = bls. (unchanged)
+  %%   multi-line row (dp = 0.3 bls + excess) -> next row:
+  %%     glue = bls - (0.3 bls + excess) - 0.7 bls = -excess;
+  %%     -excess < 0 = \lineskiplimit, so TeX uses \lineskip = 0pt;
+  %%     stride = (0.3 bls + excess) + 0 + 0.7 bls = bls + excess.
+  %% The next row therefore drops by exactly the multi-line depth
+  %% overflow -- matching the anchor maths \dte@tempdim already
+  %% accumulates for \dte@pos@<N>.
+  %% Both assignments are scoped to the enclosing
+  %% \setbox\dte@framebox=\vbox{...} group (dirtreex env body),
+  %% so they auto-revert on vbox close; no manual save/restore.
+  \lineskiplimit=0pt\relax
+  \lineskip=0pt\relax
+  %% \smash the connector and pass-through drawers so their tall
+  %% raised hboxes -- which can reach up to (anchor_distance + 0.2
+  %% bls) above the entry's baseline (e.g. ~3.7 bls for a top-level
+  %% file like README.md whose anchor is the depth-0 root) -- do
+  %% NOT inflate the paragraph line's ht above 0.7 bls. Without
+  %% this, the line ht would be the connector ht and the
+  %% \lineskiplimit=0pt policy above would refuse to compress the
+  %% inter-row glue, opening a multi-bls gap before every row whose
+  %% anchor sits more than one bls above it. The connectors and
+  %% trunks remain visually drawn -- only their ht/dp contribution
+  %% to TeX's interline-glue maths is zeroed. These two overrides
+  %% (and the two \dte@orig@... helpers) are local to the
+  %% \dte@framebox vbox group, so they auto-revert on group close.
+  \let\dte@orig@draw@connector\dte@draw@connector
+  \def\dte@draw@connector##1{\smash{\dte@orig@draw@connector{##1}}}%
+  \let\dte@orig@draw@passthrough\dte@draw@passthrough
+  \def\dte@draw@passthrough##1{\smash{\dte@orig@draw@passthrough{##1}}}%
+  \def\strut{\vrule width 0pt height 0.7\baselineskip
+                                depth 0.3\baselineskip}%
+  \dte@compute@stride
+  %
+  \ifnum\dte@cnt>0\relax
+    \dte@render@root
+    \dte@i=1\relax
+    \loop\ifnum\dte@i<\dte@cnt\relax
+      \advance\dte@i by 1\relax
+      \edef\dte@curIdx{\the\dte@i}%
+      \expandafter\dte@render@entry\expandafter{\dte@curIdx}%
+    \repeat
+  \fi
+  %
+  \parindent=\dte@sav@pi\relax
+  \parskip=\dte@sav@ps\relax
+  \baselineskip=\dte@sav@bls\relax
+  \let\strut\dte@sav@strut
+}
+
+%% Root entry: rendered without connectors (nothing above it).
+%% The box's height/depth are renormalised to the standard
+%% 0.7 bls / remainder split so the next entry's position maths
+%% is independent of the root row's intrinsic metrics.
+\def\dte@render@root{%
+  \setbox\dte@tbox=\hbox to\hsize{%
+    \vbox{\strut
+      \zref@label{dte\the\dte@tnum.1}%
+      {\dte@textstyle\dte@format@name{1}\strut}%
+      \dte@format@comment{1}%
+    }%
+  }%
+  \dte@scratch=\ht\dte@tbox
+  \advance\dte@scratch by\dp\dte@tbox
+  \advance\dte@scratch by-0.7\baselineskip
+  \ht\dte@tbox=0.7\baselineskip
+  \dp\dte@tbox=\dte@scratch
+  \par\leavevmode
+  \box\dte@tbox
+  \endgraf
+  \expandafter\xdef\csname dte@pos@1\endcsname{-0.7\baselineskip}%
+  \dte@tempdim=\dte@scratch\relax
+}
+
+%% Entries 2..N: rendered with pass-through trunks and a
+%% connector pointing at their anchor (the previous entry at a
+%% shallower-or-equal depth).
+\def\dte@render@entry#1{%
+  \dte@j=\dte@eget{#1}{d}\relax
+  % Emit a weak inter-sibling penalty so \vsplit prefers to
+  % break at entry boundaries rather than in the middle of a
+  % multi-line comment. Skipped at parent -> first-child
+  % transitions (current depth strictly greater than the
+  % previous entry's depth), since that pair is structurally
+  % a single unit. We are in internal vertical mode here (the
+  % previous iteration closed with \endgraf, and so did
+  % \dte@render@root), so \penalty emits a proper vlist node.
+  \ifnum\dte@j>\dte@eget{\number\numexpr#1-1\relax}{d}\relax\else
+    \penalty -50\relax
+  \fi
+  %
+  % Resolve the splitflag and anchor index BEFORE drawing the
+  % pass-through, so the passthrough honours the same connV
+  % clamping the connector will apply at draw time.  (This keeps
+  % the arc-top colour split aligned with the arc's true position
+  % even when the anchor lives on the previous page.)
+  \dte@k=#1\relax
+  \dte@splitflagfalse
+  \dte@findanchor{#1}%
+  \edef\dte@anchoridx{\the\dte@k}%
+  %
+  % Pass-through vertical lines at active depths.
+  \par\leavevmode
+  \dte@draw@passthrough{#1}%
+  %
+  % Horizontal skip to the column for this entry's own depth.
+  % Computed as (depth - 1) * \dte@all + \dte@offset, all in a
+  % single \dimexpr so no shared scratch register is involved.
+  \dte@scratch=\dimexpr\numexpr\dte@j-1\relax\dte@all+\dte@offset\relax
+  \kern\dte@scratch\relax
+  %
+  % Typeset the entry's name + comment in a vbox.  \hsize is
+  % trimmed to leave room for the depth*stride columns already
+  % consumed to the left.
+  \edef\dte@sh{\the\hsize}%
+  \dte@scratch=\dte@j\dte@all
+  \advance\hsize by-\dte@scratch\relax
+  \setbox\dte@tbox=\vbox{%
+    \strut
+    \zref@label{dte\the\dte@tnum.#1}%
+    {\dte@textstyle\dte@format@name{#1}\strut}%
+    \dte@format@comment{#1}%
+  }%
+  \hsize=\dte@sh\relax
+  %
+  % Renormalise the entry's box height/depth: height is pinned
+  % to 0.7 bls, any excess becomes depth (so multi-line comments
+  % simply grow downward in the depth field).
+  \dte@scratch=\ht\dte@tbox
+  \advance\dte@scratch by\dp\dte@tbox
+  \advance\dte@scratch by-0.7\baselineskip
+  \ht\dte@tbox=0.7\baselineskip
+  \dp\dte@tbox=\dte@scratch
+  %
+  % Cumulative vertical position, used later to compute the
+  % connector length (distance from this entry back to its
+  % anchor).
+  \expandafter\xdef\csname dte@pos@#1\endcsname{\the\dte@tempdim}%
+  \advance\dte@tempdim by\dte@scratch\relax
+  \advance\dte@tempdim by 0.7\baselineskip
+  %
+  % Connector vertical height = distance to anchor, trimmed so
+  % the vertical stops at the anchor's text bottom rather than
+  % extending into the anchor row.
+  \dte@scratch=\csname dte@pos@#1\endcsname\relax
+  \advance\dte@scratch by-\csname dte@pos@\dte@anchoridx\endcsname\relax
+  \advance\dte@scratch by -0.5\baselineskip\relax
+  \ifdim\dte@scratch<0pt \dte@scratch=0pt \fi
+  %
+  % On a cross-page break the anchor is on the previous piece.
+  % Override the computed height with a fixed 0.5 bls stub so
+  % the connector's vertical bar reaches the row's top edge
+  % (raise 0.2 bls + height 0.5 bls = 0.7 bls = baseline + 0.7 =
+  % row top), meeting the passthrough / top-extension vrule from
+  % the row above without leaving a visible gap. A shorter stub
+  % (e.g. 0.2 bls) would stop 0.3 bls below the row top and break
+  % the column visually on every cross-page first-row entry.
+  \ifdte@splitflag
+    \dte@scratch=0.5\baselineskip
+  \fi
+  %
+  % Resolve per-entry style, draw the connector, then the
+  % entry's content box.
+  \dte@resolve@style{#1}%
+  \dte@draw@connector{#1}%
+  \kern\dte@sep
+  %
+  \box\dte@tbox
+  \endgraf
+}
+
+%% ------------------------------------------------------------
+%%  Walk backwards from entry #1 to find the anchor entry: the
+%%  nearest predecessor at strictly-shallower depth that sits
+%%  on the same page. If the walk crosses a page boundary the
+%%  splitflag is raised and \dte@k is reset to #1 itself so the
+%%  connector becomes the cross-page-stub variant.
+%%
+%%  A zero abspage (from \zref@extractdefault's 0 default) means
+%%  the label has not yet landed in the .aux file. That
+%%  condition raises \dte@needreruntrue globally BEFORE the
+%%  comparison branches, so the end-of-document rerun warning
+%%  fires regardless of which branch the comparison takes.
+\def\dte@findanchor#1{%
+  %% Floor guard. The recursion decrements \dte@k each call and
+  %% terminates naturally when an entry's depth is <= \dte@j.
+  %% The implicit safety net is that the root (entry 1) has
+  %% depth 0, which is <= any \dte@j >= 1. If a user violates
+  %% that invariant -- first top-level entry is a \file with
+  %% depth >0, or an outer \begingroup shadows \dte@depth and
+  %% produces an inverted depth sequence -- a \dte@k of 0 would
+  %% read \csname dte@e0d\endcsname (undefined -> \relax) and
+  %% raise `Missing number'. Snap to the cross-page-stub
+  %% fallback instead.
+  \ifnum\dte@k<2
+    \dte@k=#1\relax
+    \dte@splitflagtrue
+  \else
+    \advance\dte@k by -1\relax
+    \edef\dte@pgA{\zref@extractdefault{dte\the\dte@tnum.\the\dte@k}{abspage}{0}}%
+    \edef\dte@pgB{\zref@extractdefault{dte\the\dte@tnum.#1}{abspage}{0}}%
+    \ifnum\dte@pgA=0 \global\dte@needreruntrue\fi
+    \ifnum\dte@pgB=0 \global\dte@needreruntrue\fi
+    \ifx\dte@pgA\dte@pgB
+      % Same page -- keep searching shallower only if we are still
+      % strictly deeper than the target.
+      \ifnum\dte@eget{\the\dte@k}{d}>\dte@j\relax
+        \dte@findanchor{#1}%
+      \fi
+    \else
+      % Different page -- anchor is on the previous piece. Mark
+      % the connector as a cross-page stub.
+      \dte@k=#1\relax
+      \dte@splitflagtrue
+    \fi
+  \fi
+}
+
+%% ============================================================
+%%  Box output
+%% ============================================================
+%% Dispatch to the right output path. The breakable path handles
+%% both framed and bare trees: with box=false it skips the frame
+%% fill/border but still uses \vsplit so the tree can split across
+%% page boundaries. Without that, a tall bare tree would be a
+%% single unbreakable vbox and TeX would eject it whole to the
+%% next page instead of breaking it.
+\def\dte@output@framed{%
+  \ifdte@pagebreak
+    \dte@output@breakable
+  \else
+    \ifdte@showbox
+      \dte@output@singleframe
+    \else
+      \par\noindent\box\dte@framebox\par
+    \fi
+  \fi
+}
+
+\def\dte@output@singleframe{%
+  \par\noindent
+  \begin{tikzpicture}
+    \node[inner sep=0pt,outer sep=0pt,
+          anchor=north west,
+         ] (C) {\box\dte@framebox};
+    \begin{scope}[on background layer]
+    \fill[\dte@bgcolor]
+        ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+        [rounded corners=\dte@cTL]
+        -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+        [rounded corners=\dte@cTR]
+        -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+        [rounded corners=\dte@cBR]
+        -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+        [rounded corners=\dte@cBL]
+        -- cycle;
+    \end{scope}
+    \draw[\dte@bordercolor,line width=\dte@borderwidth]
+        ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+        [rounded corners=\dte@cTL]
+        -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+        [rounded corners=\dte@cTR]
+        -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+        [rounded corners=\dte@cBR]
+        -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+        [rounded corners=\dte@cBL]
+        -- cycle;
+  \end{tikzpicture}\par
+}
+
+%% Leader space prepended to every non-first piece so the first
+%% entry's connector has a `│` of one baselineskip feeding into
+%% it from above.  \dte@leader@dim is populated from 0.5\dte@bls
+%% inside \dte@output@breakable, where \dte@bls is guaranteed
+%% to already hold the captured tree-font baselineskip.
+
+%% Available height for a first piece (closed top, open bottom)
+%% on the current page:
+%%   remaining  = \pagegoal - \pagetotal
+%%   available  = remaining - padT - tbA - 2*borderwidth - 1 baselineskip
+%% The tree content bottom lands at (page bottom + tbA). The
+%% frame's torn bottom at (page bottom + bbA) is drawn by
+%% \dte@drawpiece via a separate yshift (see prompt 07).
+%% When `box=true`, an extra \baselineskip of safety pad is reserved
+%% so the last row of the first piece never collides with the
+%% open-bottom frame edge; for `box=false` there is no frame to
+%% collide with so the pad is omitted, but we still subtract:
+%%   (a) \parskip - \dte@drawpiece's `\par\noindent' transitions
+%%       vertical -> horizontal mode and TeX inserts \parskip glue
+%%       ABOVE the picture. Sampled BEFORE that insertion, so the
+%%       formula must compensate or the bar overshoots `tree break at'
+%%       by one \parskip.
+%%   (b) \lineskip - the tikzpicture has TikZ's default baseline
+%%       (= bbox.bottom), so as a TeX hbox it carries ht=avail and
+%%       dp=0. When TeX places it as the only hbox of a new
+%%       paragraph the natural interline-glue computation
+%%       `bls - prev_dp - new_ht' is large-negative (since
+%%       new_ht=avail >> bls), so TeX falls back to \lineskip glue.
+%%       That \lineskip pushes the picture - and therefore the
+%%       bar's bottom (which sits at C.south = picture baseline) -
+%%       one \lineskip below the configured `tree break at' line.
+%%       The box=true branch's \baselineskip reservation already
+%%       absorbs both contributions, so no separate term is added
+%%       there.
+\def\dte@compute@availht@first{%
+  \dte@availht=\pagegoal
+  \advance\dte@availht by-\pagetotal
+  \ifdte@showbox
+    \advance\dte@availht by-\dimexpr\dte@padT\relax
+    \advance\dte@availht by-2\dimexpr\dte@borderwidth\relax
+    \advance\dte@availht by-\baselineskip
+  \else
+    \advance\dte@availht by-\parskip
+    \advance\dte@availht by-\lineskip
+  \fi
+  \advance\dte@availht by-\dimexpr\dte@tbA\relax
+}
+%% Available height for a middle piece (both sides open). Takes
+%% a full textheight, subtracts tree-break-at offsets (tbB top,
+%% tbA bottom), the two border widths, one baselineskip safety
+%% pad, and the leader space prepended above the first row.
+%% The frame's torn-edge offsets bbB / bbA are applied
+%% independently inside \dte@drawpiece (see prompt 07).
+%% When `box=true`, an extra \baselineskip of safety pad is reserved
+%% so the last row of the middle piece never collides with the
+%% open-bottom frame edge; for `box=false` there is no frame to
+%% collide with and the pad is omitted (otherwise a bare-tree default
+%% `tbA=0pt` would still leave a visible ~1 em gap).
+\def\dte@compute@availht@middle{%
+  \dte@availht=\textheight
+  \advance\dte@availht by-\dimexpr\dte@tbB\relax
+  \advance\dte@availht by-\dimexpr\dte@tbA\relax
+  \ifdte@showbox
+    \advance\dte@availht by-2\dimexpr\dte@borderwidth\relax
+    \advance\dte@availht by-\baselineskip
+  \fi
+  \advance\dte@availht by-\dte@leader@dim
+}
+
+\def\dte@output@breakable{%
+  % Materialise the leader space into an allocated dimen once
+  % per environment, before any consumer
+  % (\dte@compute@availht@middle or \dte@drawpiece) reads it.
+  % \dte@bls was captured under the tree font by the framebox
+  % vbox and ejected via \aftergroup -- see the environment body.
+  \dte@leader@dim=0.5\dte@bls\relax
+  % Capture the framebox's width BEFORE any \vsplit consumes it.
+  % A TeX \vbox's natural width is max(contents' widths); when a
+  % later \vsplit leaves a remainder that contains only invisible
+  % trailing kern/glue/penalty (no \hbox nodes), that remainder's
+  % \wd collapses to 0pt. Feeding such a 0pt-wide box into the
+  % TikZ content node (\dte@drawpiece below) would shrink the
+  % border rectangle to just padL+padR wide on the trailing page.
+  % We reapply this width to every piece so the frame always
+  % spans the configured content area regardless of remainder
+  % density.
+  \dte@contentwd=\wd\dte@framebox
+  \dte@pagecount=0\relax
+  \dte@compute@availht@first
+  % Safety: if we are too close to the page bottom to fit any
+  % useful content, flush to the next page and recompute.
+  \ifdim\dte@availht<2\baselineskip\relax
+    \newpage
+    \dte@compute@availht@middle
+  \fi
+  \dte@tempdim=\ht\dte@framebox
+  \advance\dte@tempdim by\dp\dte@framebox
+  \ifdim\dte@tempdim>\dte@availht
+    \dte@dosplit
+  \else
+    % Single-piece path: when the framebox fits, skip the splitter
+    % entirely. With box=true we wrap it in a TikZ frame; with
+    % box=false we drop it bare into the surrounding vertical list.
+    \ifdte@showbox
+      \dte@output@singleframe
+    \else
+      \par\noindent\box\dte@framebox\par
+    \fi
+  \fi
+}
+
+\def\dte@dosplit{%
+  % First piece: split off \dte@availht worth of content from
+  % the top of the framebox and draw it with a closed top / open
+  % bottom. Continue on the next page.
+  %
+  % For box=false: clamp \splitmaxdepth=0pt so \vsplit does NOT
+  % swallow arbitrary trailing kern/glue/penalty below the last
+  % row. LaTeX's default leaves it at \maxdimen, which lets the
+  % splitresult extend several points past its nominal \ht and
+  % drives the bar bottom past the configured `tree break at'
+  % boundary even after \dte@compute@availht@first has subtracted
+  % \parskip. The 0pt cap pins the splitresult bottom to its last
+  % row's baseline + that row's depth (no extra glue absorbed).
+  % For box=true the framed-piece geometry already absorbs that
+  % glue inside the bordered region, and changing \splitmaxdepth
+  % would visibly resize every framed piece -- so we leave it at
+  % the LaTeX default in the box=true branch.
+  \splittopskip=0pt\relax
+  \ifdte@showbox\else
+    \splitmaxdepth=0pt\relax
+  \fi
+  \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
+  \dte@drawpiece{first}%
+  \newpage
+  \dte@dosplit@cont
+}
+\def\dte@dosplit@cont{%
+  % Middle or last piece. While the remaining framebox still
+  % exceeds a middle-piece allotment, split another middle piece
+  % off; otherwise emit the whole remainder as the last piece.
+  \advance\dte@pagecount by 1\relax
+  \dte@compute@availht@middle
+  \dte@tempdim=\ht\dte@framebox
+  \advance\dte@tempdim by\dp\dte@framebox
+  \ifdim\dte@tempdim>\dte@availht
+    %% Re-pin \splitmaxdepth=0pt for box=false at every middle-piece
+    %% split.  \dte@dosplit set it for the first piece and the
+    %% setting persists through the env group, but stamping it
+    %% explicitly here keeps the intent local to the call site and
+    %% survives any future refactor that hoists either macro out of
+    %% the shared scope. Box=true keeps the LaTeX default to avoid
+    %% resizing already-framed pieces -- see \dte@dosplit.
+    \ifdte@showbox\else
+      \splitmaxdepth=0pt\relax
+    \fi
+    \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
+    \dte@drawpiece{middle}%
+    \newpage
+    \expandafter\dte@dosplit@cont
+  \else
+    \setbox\dte@splitresult=\box\dte@framebox
+    \dte@drawpiece{last}%
+  \fi
+}
+
+%% ------------------------------------------------------------
+%%  Draw one piece with a partial frame.
+%%
+%%  Per side we decide whether the frame side is CLOSED (bordered,
+%%  rounded corners, padded) or OPEN (cut at the page-break line,
+%%  controlled by `box break at`):
+%%    first  piece -> top closed (padT, cTL, cTR),   bottom open (bbA)
+%%    middle piece -> top open   (bbB),              bottom open (bbA)
+%%    last   piece -> top open   (bbB),              bottom closed (padB, cBL, cBR)
+%%  Tree-extension vrules use the `tree break at` offsets
+%%  (tbA / tbB) instead of the box offsets.
+\def\dte@drawpiece#1{%
+  \par\noindent
+  \global\advance\dte@piecenum by 1\relax
+  \edef\dte@piecetype{#1}%
+  \def\dte@pfirst{first}\def\dte@pmiddle{middle}\def\dte@plast{last}%
+  %
+  % Continuation pieces (middle / last) are the FIRST hbox on a
+  % new page (they immediately follow \newpage in
+  % \dte@dosplit@cont). TeX places that first hbox so its
+  % baseline lands at max(\topskip, \ht{hbox}) below page top.
+  % We want C.north -- which is the picture's baseline -- to land
+  % at exactly \dte@tbB below page top, so the tree first row sits
+  % at the configured `tree break at` distance and the frame
+  % torn-top (drawn at C.north + (tbB-bbB) above C.north) lands
+  % at the configured `box break at` distance. Force the policy
+  % by zeroing \topskip locally and extending the picture's
+  % bounding box upward to include a point at yshift=\dte@tbB
+  % above C.north (added inside the tikzpicture below). Without
+  % this, the picture's natural ht is only (tbB-bbB) -- just the
+  % frame's protrusion above C.north -- and the whole continuation
+  % drifts upward by exactly bbB.
+  \ifx\dte@piecetype\dte@pfirst\else
+    \topskip=0pt\relax
+  \fi
+  %
+  % Force the split remainder to advertise the full configured
+  % content width. When a clean \vsplit exhausts every visible
+  % node in \dte@framebox (tree ends exactly at the first piece's
+  % bottom), the remainder becomes a void box -- and TeX silently
+  % ignores \wd/\ht/\dp assignments on void boxes. Without this
+  % guard C's bounding box would collapse to 0pt and leave the
+  % closing border a sliver of width padL+padR on the trailing
+  % page. Replacing void with an empty non-void \hbox makes the
+  % subsequent \wd assignment stick; the assignment is a no-op
+  % when the remainder already spans the full width.
+  \ifvoid\dte@splitresult
+    \setbox\dte@splitresult=\hbox{}%
+  \fi
+  \wd\dte@splitresult=\dte@contentwd\relax
+  \begin{tikzpicture}
+    % Content node. inner sep=0 pins C's edges to the content's
+    % edges. For piece 2+ we prepend \dte@leader@dim worth of
+    % blank space above the content so the first entry's
+    % connector has room for a `│` leading down from the top.
+    \node[inner sep=0pt,outer sep=0pt,
+          anchor=north west,
+         ] (C) {%
+      \ifx\dte@piecetype\dte@pfirst
+        \box\dte@splitresult
+      \else
+        \vbox{\kern\dte@leader@dim\relax\box\dte@splitresult}%
+      \fi
+    };
+    %
+    % Continuation pieces: stamp a single invisible coordinate
+    % at yshift=\dte@tbB above C.north_west so the picture's
+    % natural \ht reaches \dte@tbB. Together with \topskip=0pt
+    % (set just before the tikzpicture in \dte@drawpiece) this
+    % anchors C.north exactly \dte@tbB below the new page's top
+    % edge -- which puts the tree first row at the configured
+    % `tree break at' distance and the frame torn-top at the
+    % configured `box break at' distance. See the lengthy
+    % comment in \dte@drawpiece above the \topskip assignment.
+    \ifx\dte@piecetype\dte@pfirst\else
+      \path ([yshift=\dte@tbB]C.north west);
+    \fi
+    %
+    % --- Background fill + border (shape depends on piece type) ---
+    % Skipped when box=false: the bare tree has no frame to draw,
+    % only the tree-extension vrules below still apply.
+    \ifdte@showbox
+    \ifx\dte@piecetype\dte@pfirst
+      % First piece: closed top (rounded TL/TR), open bottom at +bbA.
+      \begin{scope}[on background layer]
+      \fill[\dte@bgcolor]
+          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west)
+          [rounded corners=\dte@cTL]
+          -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+          [rounded corners=\dte@cTR]
+          -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+          [sharp corners]
+          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east)
+          -- cycle;
+      \end{scope}
+      \draw[\dte@bordercolor,line width=\dte@borderwidth]
+          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west)
+          [rounded corners=\dte@cTL]
+          -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+          [rounded corners=\dte@cTR]
+          -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+          [sharp corners]
+          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+    \else\ifx\dte@piecetype\dte@plast
+      % Last piece: open top at -bbB, closed bottom (rounded BL/BR).
+      \begin{scope}[on background layer]
+      \fill[\dte@bgcolor]
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
+          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east)
+          [rounded corners=\dte@cBR]
+          -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+          [rounded corners=\dte@cBL]
+          -- ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+          [sharp corners]
+          -- cycle;
+      \end{scope}
+      \draw[\dte@bordercolor,line width=\dte@borderwidth]
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
+          [rounded corners=\dte@cBL]
+          -- ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+          [rounded corners=\dte@cBR]
+          -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+          [sharp corners]
+          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east);
+    \else
+      % Middle piece: both sides open; fill a plain rectangle
+      % and draw only the two vertical borders.
+      \begin{scope}[on background layer]
+      \fill[\dte@bgcolor]
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
+          rectangle
+          ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+      \end{scope}
+      \draw[\dte@bordercolor,line width=\dte@borderwidth]
+        ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)--
+        ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west);
+      \draw[\dte@bordercolor,line width=\dte@borderwidth]
+        ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east)--
+        ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+    \fi\fi
+    \fi
+    %
+    % --- Top extension vrules (middle and last pieces) ---
+    %
+    % Each active-depth column inherited from the previous piece
+    % has to continue visually from the top of this piece down
+    % into row 1 so the `│` appears unbroken across the page
+    % break. We draw from yshift=-tbB (just below the top of
+    % the content) down through the leader space and 0.3 bls
+    % into row 1, where the row's own passthrough / elbow takes
+    % over. With leader=0.5 bls the combined extension + row-1
+    % passthrough produces a `│` of one baselineskip above the
+    % first entry's connector, matching the spacing between
+    % siblings elsewhere.
+    %
+    % Colour convention matches \dte@draw@passthrough: each
+    % column uses the colour of the next entry at that depth
+    % after the break point (the entry whose elbow the line
+    % leads into).
+    \ifx\dte@piecetype\dte@pfirst\else
+      \expandafter\ifx
+        \csname dte@breaklines@\the\numexpr\dte@piecenum-1\relax\endcsname
+        \relax
+      \else
+        \edef\dte@prevbk{\dte@safeget{dte@breaklines@\the\numexpr\dte@piecenum-1\relax}}%
+        \edef\dte@bkidx{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+        \@for\dte@extlvl:=\dte@prevbk\do{%
+          \dte@k=\dte@extlvl\relax
+          \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
+          \dte@find@nextsibling{\dte@bkidx}{\the\dte@k}%
+          \let\dte@ext@src\dte@nextidx
+          \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
+          \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
+          \draw[\dte@ext@lc,line width=\dte@ext@lw]
+            ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
+            ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
+        }%
+        % Feed-first-child column. When the break falls between
+        % a directory and its first child, that child's column
+        % is absent from the previous piece's active-depth list
+        % (no future sibling exists yet). Draw one extra
+        % extension vrule at the first-child's depth in the
+        % first-child's colour so the top `└` / `├` on this
+        % piece still has a `│` leading down into it.
+        \dte@scratchcnt=\numexpr\dte@bkidx+1\relax
+        \ifnum\dte@scratchcnt>\dte@cnt\else
+          \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
+          \ifnum\dte@firstd>0\relax
+            \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
+            \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
+            \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
+            \draw[\dte@ext@lc,line width=\dte@ext@lw]
+              ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
+              ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
+          \fi
+        \fi
+      \fi
+    \fi
+    %
+    % --- Bottom extension vrules (first and middle pieces) ---
+    %
+    % Anchored from C.north west: each entry occupies exactly
+    % one baselineskip (ht=0.7 bls, dp=0.3 bls), so row R ends
+    % R*bls below C.north. For middle pieces (piecenum>1) add
+    % the leader offset because the content is shifted down by
+    % that amount inside C. We intentionally anchor from north
+    % rather than south, because \vsplit pads \ht\splitresult
+    % up to the target height and leaves invisible kern below
+    % the last row -- C.south would sit below that kern and
+    % miscompute the last-row baseline.
+    \ifx\dte@piecetype\dte@plast\else
+      \expandafter\ifx
+        \csname dte@breaklines@\the\dte@piecenum\endcsname
+        \relax
+      \else
+        \dte@scratchcnt=\csname dte@breakidx@\the\dte@piecenum\endcsname\relax
+        \ifnum\dte@piecenum>1
+          \edef\dte@tmp@idx{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+          \advance\dte@scratchcnt by -\dte@tmp@idx\relax
+        \fi
+        \dte@tempdim=\dte@scratchcnt\dte@bls\relax
+        \ifnum\dte@piecenum>1
+          \advance\dte@tempdim by\dte@leader@dim\relax
+        \fi
+        \edef\dte@extTopY{-\the\dte@tempdim}%
+        \edef\dte@curbk{\dte@safeget{dte@breaklines@\the\dte@piecenum}}%
+        \edef\dte@bkidx{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+        \@for\dte@extlvl:=\dte@curbk\do{%
+          \dte@k=\dte@extlvl\relax
+          \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
+          \dte@find@nextsibling{\dte@bkidx}{\the\dte@k}%
+          \let\dte@ext@src\dte@nextidx
+          \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
+          \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
+          \draw[\dte@ext@lc,line width=\dte@ext@lw]
+            ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
+            ([xshift=\dte@tempdim,yshift=0pt]C.south west);
+        }%
+        % Feed-first-child column (bottom extension). Symmetric
+        % to the top-extension helper above: if the last entry
+        % on this piece is a directory whose first child sits on
+        % the NEXT piece, that child's depth is strictly deeper
+        % than the last entry's depth and so is absent from both
+        % the active-depth list and the own-depth fallback.
+        % Draw one extra vrule at the first-child's depth in the
+        % first-child's colour so the matching top extension on
+        % the next piece meets it cleanly.
+        \dte@scratchcnt=\dte@bkidx\relax
+        \edef\dte@lastd{\dte@eget{\number\dte@scratchcnt}{d}}%
+        \advance\dte@scratchcnt by 1\relax
+        \ifnum\dte@scratchcnt>\dte@cnt\else
+          \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
+          \ifnum\dte@firstd>\dte@lastd\relax
+            \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
+            \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
+            \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
+            \draw[\dte@ext@lc,line width=\dte@ext@lw]
+              ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
+              ([xshift=\dte@tempdim,yshift=0pt]C.south west);
+          \fi
+        \fi
+      \fi
+    \fi
+  \end{tikzpicture}\par
+}
+
+%% ============================================================
+%%  Cross-page break data (precomputed from zref)
+%% ============================================================
+%% Scan the entry list for adjacent pairs that resolve to
+%% different absolute pages and record, per break, the active-
+%% depth list and the last-entry index on the piece that ends
+%% at that break. Consumed by \dte@drawpiece to emit the
+%% extension vrules and to place the bottom extension's top
+%% anchor.
+%%
+%% A zero abspage means the corresponding zref label has not
+%% landed in the .aux yet. We raise \dte@needreruntrue in both
+%% lookups BEFORE the \ifx comparison so the end-of-document
+%% rerun warning fires no matter how the comparison classifies
+%% the pair.
+\def\dte@compute@breakdata{%
+  \dte@breakcount=0\relax
+  \ifnum\dte@cnt<2\relax\else
+    \dte@i=2\relax
+    \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+      \edef\dte@prevIdx{\the\numexpr\dte@i-1\relax}%
+      \edef\dte@pgPrev{%
+        \zref@extractdefault{dte\the\dte@tnum.\dte@prevIdx}{abspage}{0}}%
+      \edef\dte@pgCur{%
+        \zref@extractdefault{dte\the\dte@tnum.\the\dte@i}{abspage}{0}}%
+      \ifnum\dte@pgPrev=0 \global\dte@needreruntrue\fi
+      \ifnum\dte@pgCur=0  \global\dte@needreruntrue\fi
+      \ifx\dte@pgPrev\dte@pgCur\else
+        \advance\dte@breakcount by 1\relax
+        \dte@store@breaklines{\dte@prevIdx}{\the\dte@breakcount}%
+      \fi
+      \advance\dte@i by 1\relax
+    \repeat
+  \fi
+}
+
+\def\dte@store@breaklines#1#2{%
+  % #1 = index of the last entry on the previous page.
+  % #2 = 1-based break number.
+  %
+  % Start from the active-depth list of the last entry, and
+  % append the entry's own depth if it is a last-child directory
+  % (its own column still needs an extension into the next
+  % piece). Guards against a leading comma the same way
+  % \dte@ca@probe@loop does, so the consumer \@for loops never
+  % see an empty first iteration.
+  \edef\dte@bklist{\dte@safeget{dte@e#1a}}%
+  \ifnum\dte@eget{#1}{l}=0\relax
+    \ifx\dte@bklist\@empty
+      \edef\dte@bklist{\dte@eget{#1}{d}}%
+    \else
+      \edef\dte@bklist{\dte@bklist,\dte@eget{#1}{d}}%
+    \fi
+  \fi
+  \expandafter\xdef\csname dte@breaklines@#2\endcsname{\dte@bklist}%
+  % Also remember this piece's last-entry index so \dte@drawpiece
+  % can compute the natural last-baseline position without
+  % relying on \ht\splitresult (which \vsplit pads up to the
+  % target height with invisible kern below the last row).
+  \expandafter\xdef\csname dte@breakidx@#2\endcsname{#1}%
+}
+
+%% ============================================================
+%%  The dirtreex environment
+%% ============================================================
+%% Apply default break-at distances for the current environment.
+%% Called BEFORE \pgfkeys{...,#1}, so user-supplied values override
+%% these defaults. Reads \ifdte@showbox as it stands coming into
+%% the environment (the persistent package default is true, set at
+%% \dte@showboxtrue above); the pgfkeys pass that follows may flip
+%% the flag, which is handled by \dte@enforce@boxfalse@breakat.
+%% The defaults are pinned to ABSOLUTE LENGTHS at parse time via
+%% \edef + \dimexpr, evaluated under the surrounding-document font.
+%% This matters because the env body later switches to \dte@fontsize
+%% (\small by default) at line 1598 — a stored "1em" token would
+%% otherwise be re-interpreted under \small at use time, giving the
+%% user a smaller em than the README and the surrounding text imply.
+\def\dte@apply@breakat@defaults{%
+  \ifdte@showbox
+    \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
+    \edef\dte@tbA{\the\dimexpr 1em\relax}\edef\dte@tbB{\the\dimexpr 1em\relax}%
+  \else
+    %% box=false: box break at is ignored; force both to 0pt so
+    %% any internal math that still references them reads a
+    %% benign zero. tree break at defaults to 0pt (the tree is
+    %% bare, no visible frame to pull away from).
+    \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
+    \edef\dte@tbA{\the\dimexpr 0pt\relax}\edef\dte@tbB{\the\dimexpr 0pt\relax}%
+  \fi
+}
+%% Enforce the "box=false => box break at is ignored" rule AFTER
+%% pgfkeys has had a chance to parse user input. We zero
+%% \dte@bbA / \dte@bbB unconditionally when the frame is off, so
+%% any downstream math that still references them reads benign
+%% zeros. For \dte@tbA / \dte@tbB the rule is conditional: if the
+%% user supplied an explicit `tree break at' (\ifdte@tbset is true),
+%% their value survives; otherwise we ZERO tbA/tbB so the README's
+%% "tree break at defaults to 0pt when box=false" semantic actually
+%% holds. Without this gating the package-default 1em (stamped by
+%% \dte@apply@breakat@defaults before pgfkeys parsed `box=false')
+%% would silently leak through and produce a visible ~1em gap at
+%% the continuation page top and an offset bar bottom on the first
+%% piece. Pinned to absolute lengths via \edef + \dimexpr for the
+%% same reason as \dte@apply@breakat@defaults — see the note above.
+\def\dte@enforce@boxfalse@breakat{%
+  \ifdte@showbox\else
+    \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
+    \ifdte@tbset\else
+      \edef\dte@tbA{\the\dimexpr 0pt\relax}%
+      \edef\dte@tbB{\the\dimexpr 0pt\relax}%
+    \fi
+  \fi
+}
+\NewEnviron{dirtreex}[1][]{%
+  \begingroup
+  \dte@inenvtrue
+  \global\advance\dte@tnum by 1\relax
+  \dte@flush@state
+  \global\dte@cnt=0\relax
+  \global\dte@depth=0\relax
+  %
+  \dte@tbsetfalse
+  \dte@apply@breakat@defaults
+  \pgfkeys{/dte/.cd,#1}%
+  \dte@enforce@boxfalse@breakat
+  %
+  % Execute the environment body once in a throwaway box to
+  % collect entry data via \dir / \file. Nothing is typeset yet
+  % at this stage.
+  \setbox0=\vbox{\BODY}%
+  %
+  \ifnum\dte@cnt=0\relax
+    \PackageWarning{dirtreex}{Empty dirtreex environment; nothing rendered.}%
+  \else
+    \dte@preprocess
+    \dte@compute@breakdata
+    %
+    \global\dte@piecenum=0\relax
+    \dte@fontsize\relax
+    \dte@compute@stride
+    %
+    \setbox\dte@framebox=\vbox{%
+      \hsize=\dimexpr\linewidth
+        \ifdte@showbox
+          -\dte@padL-\dte@padR
+          -2\dimexpr\dte@borderwidth\relax
+        \fi\relax
+      \dte@fontsize\relax
+      %% Capture \baselineskip under the tree's actual font into
+      %% \dte@bls. The local read inside this vbox drives
+      %% \dte@render@tree's row stride; the \global write lifts the
+      %% same value into the enclosing env group where \dte@drawpiece
+      %% and \dte@compute@availht@middle read it via
+      %% \dte@leader@dim = 0.5\dte@bls. Subsequent envs overwrite it,
+      %% so no \dte@flush@state entry is needed.
+      \dte@bls=\baselineskip
+      \global\dte@bls=\baselineskip
+      \dte@render@tree
+    }%
+    %
+    \dte@output@framed
+  \fi
+  %
+  \dte@inenvfalse
+  \endgroup
+}
+
+%% ============================================================
+%%  Rerun nudge
+%% ============================================================
+%% Document-end hook. Fires exactly once per LaTeX run; the
+%% message contains the literal substring "Rerun" so latexmk
+%% (and the rerunfilecheck package, if loaded) pick it up and
+%% schedule another pass. This honours the README's claim that
+%% the package emits rerunfilecheck-compatible warnings on a
+%% first compile whose .aux is not yet stable.
+\AtEndDocument{%
+  \ifdte@needrerun
+    \PackageWarningNoLine{dirtreex}%
+      {Rerun LaTeX to get dirtreex page breaks right}%
+  \fi
+}
+
+\makeatother
+\endinput

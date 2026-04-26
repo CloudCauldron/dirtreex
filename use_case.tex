@@ -1,0 +1,1458 @@
+%% use_case.tex -- dirtreex use case gallery
+%%
+%% A walkthrough of every major feature of the dirtreex package.
+%% Each example has three parts, in order:
+%%   (1) a subsection title,
+%%   (2) the raw source code shown inside a lstlisting frame,
+%%   (3) the exact same source code typeset by the package so that
+%%       the reader can see its output immediately below.
+%%
+%% Compile with:  lualatex use_case.tex
+%%                lualatex use_case.tex (second pass for zref)
+
+\documentclass[11pt]{article}
+\newcommand{\pagemargin}{2cm}
+\usepackage[a4paper,margin=\pagemargin]{geometry}
+%% Internal helpers: emit one deferred shipout-BG rule whose y-offset
+%% is supplied as an ABSOLUTE pt literal (no `em' in sight). Used by
+%% the \debug…margin… macros below.
+\newcommand{\dbgstamplower}[1]{%
+  \AddToShipoutPictureBG*{\AtPageLowerLeft{\put(0, #1){\rule{\paperwidth}{0.5pt}}}}}
+\newcommand{\dbgstamplowercolour}[2]{%
+  \AddToShipoutPictureBG*{\AtPageLowerLeft{\put(0, #1){\textcolor{#2}{\rule{\paperwidth}{0.5pt}}}}}}
+\newcommand{\dbgstampupper}[1]{%
+  \AddToShipoutPictureBG*{\AtPageUpperLeft{\put(0, #1){\rule{\paperwidth}{0.5pt}}}}}
+\newcommand{\dbgstampuppercolour}[2]{%
+  \AddToShipoutPictureBG*{\AtPageUpperLeft{\put(0, #1){\textcolor{#2}{\rule{\paperwidth}{0.5pt}}}}}}
+%% Each \debug…margin… macro PINS its dimension expressions to absolute
+%% pt at call time (under the doc body font that the user is in when
+%% the macro is invoked), then \expandafter-injects the pinned literal
+%% into the helpers above. Without this pinning, eso-pic's deferred
+%% expansion would resolve `1em' under whatever font is active at
+%% shipout — for first-piece pages of a multi-page dirtreex env that is
+%% the env's \small (~0.95 pt smaller per em), producing a visible
+%% mismatch between the reference rules and the package's own (doc-em
+%% pinned) tbA/bbA geometry.
+\newcommand{\debugboxedmarginlower}[2]{%
+  \edef\dbgrefa{\the\dimexpr \pagemargin\relax}%
+  \edef\dbgrefb{\the\dimexpr \pagemargin + #1\relax}%
+  \edef\dbgrefc{\the\dimexpr \pagemargin + #2\relax}%
+  \expandafter\dbgstamplower\expandafter{\dbgrefa}%
+  \expandafter\dbgstamplowercolour\expandafter{\dbgrefb}{red}%
+  \expandafter\dbgstamplowercolour\expandafter{\dbgrefc}{blue}%
+}
+\newcommand{\debugboxedmarginupper}[2]{%
+  \edef\dbgrefa{\the\dimexpr -\pagemargin\relax}%
+  \edef\dbgrefb{\the\dimexpr -\pagemargin - #1\relax}%
+  \edef\dbgrefc{\the\dimexpr -\pagemargin - #2\relax}%
+  \expandafter\dbgstampupper\expandafter{\dbgrefa}%
+  \expandafter\dbgstampuppercolour\expandafter{\dbgrefb}{red}%
+  \expandafter\dbgstampuppercolour\expandafter{\dbgrefc}{blue}%
+}
+%% Bare-tree variants: no frame to draw, so the red `box break at`
+%% reference line is omitted -- only the page-margin baseline (black)
+%% and the `tree break at` offset (blue) are shown.
+\newcommand{\debugbaremarginlower}[1]{%
+  \edef\dbgrefa{\the\dimexpr \pagemargin\relax}%
+  \edef\dbgrefb{\the\dimexpr \pagemargin + #1\relax}%
+  \expandafter\dbgstamplower\expandafter{\dbgrefa}%
+  \expandafter\dbgstamplowercolour\expandafter{\dbgrefb}{blue}%
+}
+\newcommand{\debugbaremarginupper}[1]{%
+  \edef\dbgrefa{\the\dimexpr -\pagemargin\relax}%
+  \edef\dbgrefb{\the\dimexpr -\pagemargin - #1\relax}%
+  \expandafter\dbgstampupper\expandafter{\dbgrefa}%
+  \expandafter\dbgstampuppercolour\expandafter{\dbgrefb}{blue}%
+}
+\usepackage{dirtreex}
+\usepackage{xcolor}
+\usepackage{fancyvrb}
+\usepackage{eso-pic}
+\usetikzlibrary{patterns}
+\newcommand{\debugvspace}[1]{%
+  \par\noindent
+  \begin{tikzpicture}
+    \fill[pattern=north east lines, pattern color=gray!60]
+      (0,0) rectangle (\linewidth, #1);
+  \end{tikzpicture}%
+  \par
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6\baselineskip}
+
+\fvset{
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{black!40},
+  fontsize=\footnotesize,
+  numbers=none,
+}
+
+\title{\textbf{dirtreex} -- Use Case Gallery}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent
+This document walks through the full feature surface of the \texttt{dirtreex} package. Each numbered entry shows (a) the raw source code exactly as you would write it, and (b) the rendered result produced by that code. The examples are self-contained: copy any snippet into a preamble with \verb|\usepackage{dirtreex}| and it will compile.
+
+\tableofcontents
+
+\clearpage
+
+% ============================================================
+\section{Basics}
+% ============================================================
+
+\subsection{Default tree}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{project}{root directory}{
+    \dir{src}{source code}{
+      \file{main.py}{entry point}
+      \file{util.py}{helpers}
+    }
+    \file{README.md}{documentation}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{project}{root directory}{
+    \dir{src}{source code}{
+      \file{main.py}{entry point}
+      \file{util.py}{helpers}
+    }
+    \file{README.md}{documentation}
+  }
+\end{dirtreex}
+
+\subsection{Empty comments and empty subtrees}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{root}{}{
+    \file{a.txt}{with comment}
+    \file{b.txt}{}
+    \dir{empty-dir}{}{}
+    \dir{has-comment}{no children}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{root}{}{
+    \file{a.txt}{with comment}
+    \file{b.txt}{}
+    \dir{empty-dir}{}{}
+    \dir{has-comment}{no children}{}
+  }
+\end{dirtreex}
+
+\subsection{Single-node tree}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \file{lonely.txt}{a single node is legal}
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \file{lonely.txt}{a single node is legal}
+\end{dirtreex}
+
+\subsection{Multi-line comment}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{project}{top-level}{
+    \file{Makefile}{
+      build script\\
+      three lines of commentary\\
+      stay aligned in a rectangle%
+    }
+    \file{README.md}{single line}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{project}{top-level}{
+    \file{Makefile}{
+      build script\\
+      three lines of commentary\\
+      stay aligned in a rectangle%
+    }
+    \file{README.md}{single line}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Font size}
+% ============================================================
+
+\subsection{Tiny font}
+
+\begin{Verbatim}
+\begin{dirtreex}[fontsize=\tiny]
+  \dir{project}{rendered at tiny}{
+    \file{a.txt}{file A}
+    \file{b.txt}{file B}
+    \dir{sub}{subdirectory}{\file{c.txt}{}}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[fontsize=\tiny]
+  \dir{project}{rendered at tiny}{
+    \file{a.txt}{file A}
+    \file{b.txt}{file B}
+    \dir{sub}{subdirectory}{\file{c.txt}{}}
+  }
+\end{dirtreex}
+
+\subsection{Large font}
+
+\begin{Verbatim}
+\begin{dirtreex}[fontsize=\large]
+  \dir{project}{rendered at large}{
+    \file{a.txt}{file A}
+    \dir{sub}{subdirectory}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[fontsize=\large]
+  \dir{project}{rendered at large}{
+    \file{a.txt}{file A}
+    \dir{sub}{subdirectory}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Elbow shape}
+% ============================================================
+
+\subsection{Sharp elbows (default)}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=0pt]
+  \dir{sharp}{right-angle connectors}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=0pt]
+  \dir{sharp}{right-angle connectors}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{Rounded elbows, radius 3pt}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=3pt]
+  \dir{round3}{rounded 3pt}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=3pt]
+  \dir{round3}{rounded 3pt}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{Rounded elbows, radius 6pt}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=6pt]
+  \dir{round6}{rounded 6pt}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=6pt]
+  \dir{round6}{rounded 6pt}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{Extreme radius (clamped to \texttt{0.5\textbackslash baselineskip})}
+
+The package clamps the requested elbow radius against half the baseline skip (and against the line width), so an oversized value silently degrades to the largest legible arc rather than overrunning the column.
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=10pt]
+  \dir{round10}{requested 10pt -- clamped}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=10pt]
+  \dir{round10}{requested 10pt -- clamped}{
+    \file{a.txt}{}
+    \dir{sub1}{subdir 1}{
+      \file{b.txt}{}
+      \dir{sub2}{subdir 2}{\file{c.txt}{}}
+    }
+    \file{d.txt}{}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Frame (the \texttt{box} family)}
+% ============================================================
+
+\subsection{No frame (\texttt{box=false})}
+
+\begin{Verbatim}
+\begin{dirtreex}[box=false]
+  \dir{bare}{no border, no padding}{
+    \file{a.txt}{}
+    \dir{sub}{}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[box=false]
+  \dir{bare}{no border, no padding}{
+    \file{a.txt}{}
+    \dir{sub}{}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+
+\subsection{Rounded corners (uniform)}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, corners=6pt, border color=black,
+       background color=white, margin=6pt}]
+  \dir{rounded-frame}{corners=6pt}{
+    \file{a.txt}{}
+    \dir{sub}{}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  box={true, corners=6pt, border color=black,
+       background color=white, margin=6pt}]
+  \dir{rounded-frame}{corners=6pt}{
+    \file{a.txt}{}
+    \dir{sub}{}{\file{b.txt}{}}
+  }
+\end{dirtreex}
+
+\subsection{Coloured border and background}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, corners=3pt, border color=purple,
+       border width=1pt, background color=purple!5}]
+  \dir{colored}{purple border, lavender fill}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  box={true, corners=3pt, border color=purple,
+       border width=1pt, background color=purple!5}]
+  \dir{colored}{purple border, lavender fill}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{HTML hex colour + thick border}
+
+\begin{Verbatim}
+\definecolor{brand}{HTML}{2C7BE5}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=brand,
+       border width=1.5pt,
+       background color=brand!8}]
+  \dir{hex-color}{\#2C7BE5 accent}{
+    \file{main.ts}{}
+    \file{style.css}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\definecolor{brand}{HTML}{2C7BE5}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=brand,
+       border width=1.5pt,
+       background color=brand!8}]
+  \dir{hex-color}{\#2C7BE5 accent}{
+    \file{main.ts}{}
+    \file{style.css}{}
+  }
+\end{dirtreex}
+
+\subsection{Four independent corner radii}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, corners={8pt, 0pt, 8pt, 0pt},
+       border color=teal, background color=teal!5,
+       margin=6pt}]
+  \dir{corners}{TL, TR, BR, BL = 8, 0, 8, 0}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  box={true, corners={8pt, 0pt, 8pt, 0pt},
+       border color=teal, background color=teal!5,
+       margin=6pt}]
+  \dir{corners}{TL, TR, BR, BL = 8, 0, 8, 0}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{Uniform margin (single value)}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={margin=18pt, border color=black,
+       background color=gray!5}]
+  \dir{padded}{18pt margin on every side}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  box={margin=18pt, border color=black,
+       background color=gray!5}]
+  \dir{padded}{18pt margin on every side}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+
+\subsection{Asymmetric margin (four values, T/R/B/L)}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={margin={2pt, 30pt, 16pt, 4pt},
+       border color=orange, background color=orange!8}]
+  \dir{asymmetric}{T=2, R=30, B=16, L=4}{
+    \file{a}{}
+    \file{b}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  box={margin={2pt, 30pt, 16pt, 4pt},
+       border color=orange, background color=orange!8}]
+  \dir{asymmetric}{T=2, R=30, B=16, L=4}{
+    \file{a}{}
+    \file{b}{}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Global line style}
+% ============================================================
+
+\subsection{Thin blue lines}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  line color=blue!70!black, line width=0.3pt,
+  box={true, border color=blue!70!black,
+       background color=blue!5, margin=6pt}]
+  \dir{blue-thin}{0.3pt blue}{
+    \file{a.py}{}
+    \dir{sub}{}{
+      \file{b.py}{}
+      \file{c.py}{}
+    }
+    \file{d.py}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  line color=blue!70!black, line width=0.3pt,
+  box={true, border color=blue!70!black,
+       background color=blue!5, margin=6pt}]
+  \dir{blue-thin}{0.3pt blue}{
+    \file{a.py}{}
+    \dir{sub}{}{
+      \file{b.py}{}
+      \file{c.py}{}
+    }
+    \file{d.py}{}
+  }
+\end{dirtreex}
+
+\subsection{Thick red lines}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  line color=red!70!black, line width=1pt,
+  box={true, border color=red!80!black,
+       border width=2pt, background color=red!5,
+       margin=6pt}]
+  \dir{red-thick}{1pt red on 2pt frame}{
+    \file{a.py}{}
+    \dir{sub}{}{\file{b.py}{}}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  line color=red!70!black, line width=1pt,
+  box={true, border color=red!80!black,
+       border width=2pt, background color=red!5,
+       margin=6pt}]
+  \dir{red-thick}{1pt red on 2pt frame}{
+    \file{a.py}{}
+    \dir{sub}{}{\file{b.py}{}}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Per-entry overrides}
+% ============================================================
+
+\subsection{Line colour override}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{root}{global black}{
+    \file[line color=red]{error.log}{red}
+    \file{normal.txt}{inherits black}
+    \dir[line color=blue]{src}{blue branch}{
+      \file{main.py}{inherits blue}
+      \file[line color=green!60!black]{test.py}{green}
+    }
+    \dir[line color=orange]{build}{orange branch}{
+      \file{output.bin}{inherits orange}
+    }
+    \file[line color=purple]{Makefile}{purple}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{root}{global black}{
+    \file[line color=red]{error.log}{red}
+    \file{normal.txt}{inherits black}
+    \dir[line color=blue]{src}{blue branch}{
+      \file{main.py}{inherits blue}
+      \file[line color=green!60!black]{test.py}{green}
+    }
+    \dir[line color=orange]{build}{orange branch}{
+      \file{output.bin}{inherits orange}
+    }
+    \file[line color=purple]{Makefile}{purple}
+  }
+\end{dirtreex}
+
+\subsection{Line width override}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{root}{default 0.4pt}{
+    \file[line width=1.2pt]{important.txt}{1.2pt}
+    \file{normal.txt}{default}
+    \file[line width=0.2pt]{minor.txt}{0.2pt}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{root}{default 0.4pt}{
+    \file[line width=1.2pt]{important.txt}{1.2pt}
+    \file{normal.txt}{default}
+    \file[line width=0.2pt]{minor.txt}{0.2pt}
+  }
+\end{dirtreex}
+
+\subsection{Elbow radius override}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=5pt]
+  \dir{root}{global 5pt}{
+    \file{a.txt}{5pt (inherited)}
+    \file[elbow radius=0pt]{b.txt}{sharp (0pt)}
+    \file[elbow radius=10pt]{c.txt}{large (10pt)}
+    \dir[elbow radius=0pt]{sharp-dir}{sharp}{
+      \file{inside.txt}{5pt (inherited)}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=5pt]
+  \dir{root}{global 5pt}{
+    \file{a.txt}{5pt (inherited)}
+    \file[elbow radius=0pt]{b.txt}{sharp (0pt)}
+    \file[elbow radius=10pt]{c.txt}{large (10pt)}
+    \dir[elbow radius=0pt]{sharp-dir}{sharp}{
+      \file{inside.txt}{5pt (inherited)}
+    }
+  }
+\end{dirtreex}
+
+\subsection{Combined overrides (colour + width + elbow)}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=3pt]
+  \dir{project}{root}{
+    \dir[line color=blue]{src}{source}{
+      \file[line color=red, line width=1.2pt]{app.py}{
+        red, 1.2pt%
+      }
+      \file[line color=green!60!black,
+            elbow radius=0pt]{new.py}{green, sharp}
+    }
+    \file[line color=purple, line width=0.8pt,
+          elbow radius=2pt]{Makefile}{
+      purple 0.8pt 2pt%
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=3pt]
+  \dir{project}{root}{
+    \dir[line color=blue]{src}{source}{
+      \file[line color=red, line width=1.2pt]{app.py}{
+        red, 1.2pt%
+      }
+      \file[line color=green!60!black,
+            elbow radius=0pt]{new.py}{green, sharp}
+    }
+    \file[line color=purple, line width=0.8pt,
+          elbow radius=2pt]{Makefile}{
+      purple 0.8pt 2pt%
+    }
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Deep nesting}
+% ============================================================
+
+\subsection{Six-level tree}
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=2pt]
+  \dir{L0}{depth 0}{
+    \dir{L1}{depth 1}{
+      \dir{L2}{depth 2}{
+        \dir{L3}{depth 3}{
+          \dir{L4}{depth 4}{
+            \dir{L5}{depth 5}{
+              \file{leaf.txt}{bottom}
+            }
+          }
+        }
+      }
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=2pt]
+  \dir{L0}{depth 0}{
+    \dir{L1}{depth 1}{
+      \dir{L2}{depth 2}{
+        \dir{L3}{depth 3}{
+          \dir{L4}{depth 4}{
+            \dir{L5}{depth 5}{
+              \file{leaf.txt}{bottom}
+            }
+          }
+        }
+      }
+    }
+  }
+\end{dirtreex}
+
+\subsection{Eight-level tree with a shallow sibling}
+
+Mixing a deep branch and a shallow sibling shows that the per-depth column stride is uniform: every level contributes one connector slot, and the shallow sibling sits at the right offset without any manual spacing.
+
+\begin{Verbatim}
+\begin{dirtreex}[elbow radius=2pt]
+  \dir{L0}{depth 0}{
+    \dir{L1}{}{
+      \dir{L2}{}{
+        \dir{L3}{}{
+          \dir{L4}{}{
+            \dir{L5}{}{
+              \dir{L6}{}{
+                \dir{L7}{depth 7}{
+                  \file{leaf.txt}{deepest}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    \file{shallow.txt}{level-1 sibling}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[elbow radius=2pt]
+  \dir{L0}{depth 0}{
+    \dir{L1}{}{
+      \dir{L2}{}{
+        \dir{L3}{}{
+          \dir{L4}{}{
+            \dir{L5}{}{
+              \dir{L6}{}{
+                \dir{L7}{depth 7}{
+                  \file{leaf.txt}{deepest}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    \file{shallow.txt}{level-1 sibling}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Multiple trees}
+% ============================================================
+
+\subsection{Two trees in sequence}
+
+\begin{Verbatim}
+\begin{dirtreex}[box={border color=blue!60!black,
+                      background color=blue!5}]
+  \dir{first-tree}{}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+
+\bigskip
+
+\begin{dirtreex}[box={border color=red!60!black,
+                      background color=red!5}]
+  \dir{second-tree}{}{
+    \file{x.py}{}
+    \file{y.py}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[box={border color=blue!60!black,
+                      background color=blue!5}]
+  \dir{first-tree}{}{
+    \file{a.txt}{}
+    \file{b.txt}{}
+  }
+\end{dirtreex}
+
+\bigskip
+
+\begin{dirtreex}[box={border color=red!60!black,
+                      background color=red!5}]
+  \dir{second-tree}{}{
+    \file{x.py}{}
+    \file{y.py}{}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Page-break behaviour}
+% ============================================================
+
+The examples below all need enough content to overflow onto a second page. They are placed after intentional vertical filler so the tree must split at least once; in real documents the break is driven by whatever natural layout pushes the tree close to a page boundary.
+
+The black line outlines the content area, while the red and blue lines indicate where the box and directory tree should break, respectively.
+
+\subsection{Default cross-page rendering}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, border color=black,
+       background color=white, margin=6pt}]
+  \dir{project}{long tree}{
+    \dir{src}{source code}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}\file{i.py}{}
+      \file{j.py}{}
+    }
+    \dir{tests}{test suite}{
+      \file{test-a.py}{}\file{test-b.py}{}
+      \file{test-c.py}{}\file{test-d.py}{}
+      \file{test-e.py}{}
+    }
+    \dir{docs}{documentation}{
+      \file{intro.md}{}\file{api.md}{}
+      \file{tutorial.md}{}\file{changelog.md}{}
+    }
+    \file{Makefile}{}
+    \file{setup.py}{}
+    \file{README.md}{}
+    \file{LICENSE}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{3cm}
+
+\debugboxedmarginlower{0cm}{1em}
+\begin{dirtreex}[
+  box={true, border color=black,
+       background color=white, margin=6pt}]
+  \dir{project}{long tree}{
+    \dir{src}{source code}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}\file{i.py}{}
+      \file{j.py}{}
+    }
+    \dir{tests}{test suite}{
+      \file{test-a.py}{}\file{test-b.py}{}
+      \file{test-c.py}{}\file{test-d.py}{}
+      \file{test-e.py}{}
+    }
+    \dir{docs}{documentation}{
+      \file{intro.md}{}\file{api.md}{}
+      \file{tutorial.md}{}\file{changelog.md}{}
+    }
+    \file{Makefile}{}
+    \file{setup.py}{}
+    \file{README.md}{}
+    \file{LICENSE}{}
+  }
+\end{dirtreex}
+\debugboxedmarginupper{0pt}{1em}
+
+\clearpage
+
+\subsection{Cross-page with rounded elbows and per-entry colours}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  elbow radius=3pt,
+  box={true, corners=4pt, border color=black,
+       background color=white, margin=6pt}]
+  \dir{project}{colour across a page break}{
+    \dir[line color=red]{red-branch}{red}{
+      \file{r1.py}{}\file{r2.py}{}\file{r3.py}{}
+      \file{r4.py}{}\file{r5.py}{}\file{r6.py}{}
+      \file{r7.py}{}\file{r8.py}{}\file{r9.py}{}
+      \file{r10.py}{}
+    }
+    \dir[line color=blue]{blue-branch}{blue}{
+      \file{b1.py}{}\file{b2.py}{}\file{b3.py}{}
+      \file{b4.py}{}\file{b5.py}{}
+    }
+    \dir[line color=green!60!black]{green-branch}{green}{
+      \file{g1.py}{}\file{g2.py}{}\file{g3.py}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{12cm}
+
+\debugboxedmarginlower{0cm}{1em}
+\begin{dirtreex}[
+  elbow radius=3pt,
+  box={true, corners=4pt, border color=black,
+       background color=white, margin=6pt}]
+  \dir{project}{colour across a page break}{
+    \dir[line color=red]{red-branch}{red}{
+      \file{r1.py}{}\file{r2.py}{}\file{r3.py}{}
+      \file{r4.py}{}\file{r5.py}{}\file{r6.py}{}
+      \file{r7.py}{}\file{r8.py}{}\file{r9.py}{}
+      \file{r10.py}{}
+    }
+    \dir[line color=blue]{blue-branch}{blue}{
+      \file{b1.py}{}\file{b2.py}{}\file{b3.py}{}
+      \file{b4.py}{}\file{b5.py}{}
+    }
+    \dir[line color=green!60!black]{green-branch}{green}{
+      \file{g1.py}{}\file{g2.py}{}\file{g3.py}{}
+    }
+  }
+\end{dirtreex}
+\debugboxedmarginupper{0pt}{1em}
+
+\clearpage
+
+\subsection{Break offsets (\texttt{box break at} / \texttt{tree break at})}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=blue!60!black,
+       background color=blue!5, margin=6pt},
+  pagebreak={true, box break at=1em,
+             tree break at=2em}]
+  \dir{offsets}{box pulls back 4pt, tree pulls back 2pt}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{docs}{}{
+      \file{x.md}{}\file{y.md}{}\file{z.md}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{14cm}
+
+\debugboxedmarginlower{1em}{2em}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=blue!60!black,
+       background color=blue!5, margin=6pt},
+  pagebreak={true, box break at=1em,
+             tree break at=2em}]
+  \dir{offsets}{box pulls back 1em, tree pulls back 2em}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{docs}{}{
+      \file{x.md}{}\file{y.md}{}\file{z.md}{}
+    }
+  }
+\end{dirtreex}
+\debugboxedmarginupper{1em}{2em}
+
+\clearpage
+
+\subsection{Asymmetric break offsets (two values)}
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=purple!60!black,
+       background color=purple!5, margin=6pt},
+  pagebreak={true, box break at={2em, 1em},
+             tree break at={4em, 3em}}]
+  \dir{asym}{first-piece-bottom=2em and 4em, next-piece-top=1em and 3em}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{lib}{}{
+      \file{x.py}{}\file{y.py}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{12cm}
+
+\debugboxedmarginlower{2em}{4em}
+\begin{dirtreex}[
+  box={true, corners=4pt, border color=purple!60!black,
+       background color=purple!5, margin=6pt},
+  pagebreak={true, box break at={2em, 1em},
+             tree break at={4em, 3em}}]
+  \dir{asym}{first-piece-bottom=2em and 4em, next-piece-top=1em and 3em}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{lib}{}{
+      \file{x.py}{}\file{y.py}{}
+    }
+  }
+\end{dirtreex}
+\debugboxedmarginupper{1em}{3em}
+
+\clearpage
+
+\subsection{Bare tree (\texttt{box=false}) across a page break}
+
+With \texttt{box=false} there is no frame to draw, but the tree's own extension columns still need to stay coherent across the break: every active \texttt{|} continues to the page bottom, then resumes at the top of the continuation page so descendants under a parent on the previous page remain visually attached. \texttt{box break at} is ignored when the frame is off (there is no torn edge to pull back).
+
+\begin{Verbatim}
+\begin{dirtreex}[box=false]
+  \dir{bare-cross}{no frame, tree still breaks}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}\file{i.py}{}
+    }
+    \dir{tests}{}{
+      \file{t1.py}{}\file{t2.py}{}\file{t3.py}{}
+      \file{t4.py}{}
+    }
+    \file{README.md}{}\file{LICENSE}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{10cm}
+
+\debugbaremarginlower{0cm}
+\begin{dirtreex}[box=false]
+  \dir{bare-cross}{no frame, tree still breaks}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}\file{i.py}{}
+    }
+    \dir{tests}{}{
+      \file{t1.py}{}\file{t2.py}{}\file{t3.py}{}
+      \file{t4.py}{}
+    }
+    \file{README.md}{}\file{LICENSE}{}
+  }
+\end{dirtreex}
+\debugbaremarginupper{0pt}
+
+\clearpage
+
+\subsection{Bare tree with \texttt{tree break at} pull-back}
+
+Even without a frame, \texttt{tree break at} still applies: the tree extension columns retract from the page edge by the configured distance on each side of the break. Setting it asymmetrically lets the bottom of the first piece and the top of the second piece pull back by different amounts.
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  box=false,
+  pagebreak={true, tree break at={2em, 4em}}]
+  \dir{bare-pullback}{first-piece-bottom=2em, next-piece-top=4em}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{docs}{}{
+      \file{x.md}{}\file{y.md}{}\file{z.md}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{12cm}
+
+\debugbaremarginlower{2em}
+\begin{dirtreex}[
+  box=false,
+  pagebreak={true, tree break at={2em, 4em}}]
+  \dir{bare-pullback}{first-piece-bottom=2em, next-piece-top=4em}{
+    \dir{src}{}{
+      \file{a.py}{}\file{b.py}{}\file{c.py}{}
+      \file{d.py}{}\file{e.py}{}\file{f.py}{}
+      \file{g.py}{}\file{h.py}{}
+    }
+    \dir{docs}{}{
+      \file{x.md}{}\file{y.md}{}\file{z.md}{}
+    }
+  }
+\end{dirtreex}
+\debugbaremarginupper{4em}
+
+\clearpage
+
+\subsection{\texttt{pagebreak=false} (tree spills past the page)}
+
+With \texttt{pagebreak=false} the frame refuses to break; a tall tree simply overflows past the page boundary (it is never truncated). This example uses a small filler so the spillover is visible.
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  pagebreak={false},
+  box={true, border color=black!50,
+       background color=black!3, margin=6pt}]
+  \dir{no-break}{overflows past page bottom}{
+    \file{a.txt}{}\file{b.txt}{}\file{c.txt}{}
+    \file{d.txt}{}\file{e.txt}{}\file{f.txt}{}
+    \file{g.txt}{}\file{h.txt}{}\file{i.txt}{}
+    \file{j.txt}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\debugvspace{14cm}
+
+\begin{dirtreex}[
+  pagebreak={false},
+  box={true, border color=black!50,
+       background color=black!3, margin=6pt}]
+  \dir{no-break}{overflows past page bottom}{
+    \file{a.txt}{}\file{b.txt}{}\file{c.txt}{}
+    \file{d.txt}{}\file{e.txt}{}\file{f.txt}{}
+    \file{g.txt}{}\file{h.txt}{}\file{i.txt}{}
+    \file{j.txt}{}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
+\section{Multi-page mega-project}
+% ============================================================
+
+A realistic tree large enough to span three or more pages. It exercises every cross-page mechanic at once: per-branch colours, nested directory depth, mixed leaf and subtree siblings, and the \texttt{|} extension columns continuing across two consecutive breaks. Each top-level branch carries its own \texttt{line color} override, which the package threads through every active column on every continuation page.
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  fontsize=\small, elbow radius=3pt, line color=black,
+  box={true, corners=0pt, border color=blue!60,
+       border width=0.5pt, background color=blue!2,
+       margin=6pt}]
+  \dir{mega-project}{mega-project root}{
+    \dir[line color=blue]{backend}{backend services}{
+      \dir{api}{API layer}{
+        \file{server.py}{HTTP server}
+        \file{middleware.py}{middleware}
+        \file{auth.py}{authentication}
+        \file{rate\_limiter.py}{rate limiter}
+        \dir{routes}{routes}{
+          \file{users.py}{user routes}
+          \file{projects.py}{project routes}
+          \file{tasks.py}{task routes}
+          \file{reports.py}{report routes}
+          \file{admin.py}{admin routes}
+          \file{webhooks.py}{webhook routes}
+        }
+        \dir{schemas}{schemas}{
+          \file{user.py}{user schema}
+          \file{project.py}{project schema}
+          \file{task.py}{task schema}
+          \file{report.py}{report schema}
+        }
+      }
+      \dir{services}{service layer}{
+        \file{user\_service.py}{user service}
+        \file{project\_service.py}{project service}
+        \file{task\_service.py}{task service}
+        \file{notification\_service.py}{notifications}
+        \file{email\_service.py}{email service}
+        \file{cache\_service.py}{cache service}
+      }
+      \dir{database}{database layer}{
+        \file{connection.py}{connection mgmt}
+        \file{migrations.py}{migrations}
+        \dir{models}{ORM models}{
+          \file{user.py}{users table}
+          \file{project.py}{projects table}
+          \file{task.py}{tasks table}
+          \file{audit\_log.py}{audit log table}
+        }
+        \dir{repositories}{repositories}{
+          \file{user\_repo.py}{user repo}
+          \file{project\_repo.py}{project repo}
+          \file{task\_repo.py}{task repo}
+        }
+      }
+      \dir{utils}{utilities}{
+        \file{logger.py}{logging}
+        \file{config.py}{config}
+        \file{helpers.py}{helpers}
+        \file{validators.py}{validators}
+        \file{crypto.py}{crypto utils}
+      }
+    }
+    \dir[line color=teal]{frontend}{frontend app}{
+      \dir{src}{source}{
+        \dir{components}{components}{
+          \dir{common}{common}{
+            \file{Button.tsx}{button}
+            \file{Input.tsx}{input}
+            \file{Modal.tsx}{modal}
+            \file{Table.tsx}{table}
+            \file{Pagination.tsx}{pagination}
+            \file{Loading.tsx}{loading}
+            \file{ErrorBoundary.tsx}{error boundary}
+          }
+          \dir{layout}{layout}{
+            \file{Header.tsx}{header}
+            \file{Sidebar.tsx}{sidebar}
+            \file{Footer.tsx}{footer}
+            \file{MainContent.tsx}{main content}
+          }
+          \dir{pages}{pages}{
+            \file{Dashboard.tsx}{dashboard}
+            \file{ProjectList.tsx}{project list}
+            \file{ProjectDetail.tsx}{project detail}
+            \file{TaskBoard.tsx}{task board}
+            \file{UserProfile.tsx}{user profile}
+            \file{Settings.tsx}{settings}
+            \file{Login.tsx}{login}
+            \file{Register.tsx}{register}
+          }
+        }
+        \dir{hooks}{custom hooks}{
+          \file{useAuth.ts}{auth hook}
+          \file{useApi.ts}{api hook}
+          \file{useWebSocket.ts}{websocket hook}
+          \file{useLocalStorage.ts}{local storage hook}
+        }
+        \dir{stores}{stores}{
+          \file{authStore.ts}{auth state}
+          \file{projectStore.ts}{project state}
+          \file{uiStore.ts}{ui state}
+        }
+        \dir{utils}{utilities}{
+          \file{api.ts}{api client}
+          \file{format.ts}{format}
+          \file{validation.ts}{form validation}
+        }
+        \file{App.tsx}{app entry}
+        \file{index.tsx}{render entry}
+        \file{router.tsx}{router config}
+      }
+      \file{package.json}{dependencies}
+      \file{tsconfig.json}{typescript config}
+      \file{vite.config.ts}{vite config}
+    }
+    \dir[line color=orange]{devops}{devops \& deployment}{
+      \dir{docker}{docker config}{
+        \file{Dockerfile.backend}{backend image}
+        \file{Dockerfile.frontend}{frontend image}
+        \file{docker-compose.yml}{compose file}
+        \file{docker-compose.dev.yml}{dev compose}
+      }
+      \dir[line color=green]{k8s}{k8s config}{
+        \file{deployment.yaml}{deployment}
+        \file{service.yaml}{service}
+        \file{ingress.yaml}{ingress}
+        \file{configmap.yaml}{configmap}
+        \file{secret.yaml}{secret}
+        \file{hpa.yaml}{horizontal autoscaler}
+      }
+      \dir{ci}{CI}{
+        \file{.gitlab-ci.yml}{gitlab ci}
+        \file{Jenkinsfile}{jenkins pipeline}
+      }
+      \dir{monitoring}{monitoring}{
+        \file{prometheus.yml}{prometheus config}
+        \file{grafana-dashboard.json}{grafana dashboard}
+        \file{alertmanager.yml}{alert rules}
+      }
+    }
+    \file{README.md}{project readme}
+    \file{LICENSE}{license}
+    \file{.gitignore}{git ignore rules}
+    \file{Makefile}{build script}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  fontsize=\small, elbow radius=3pt, line color=black,
+  box={true, corners=0pt, border color=blue!60,
+       border width=0.5pt, background color=blue!2,
+       margin=6pt}]
+  \dir{mega-project}{mega-project root}{
+    \dir[line color=blue]{backend}{backend services}{
+      \dir{api}{API layer}{
+        \file{server.py}{HTTP server}
+        \file{middleware.py}{middleware}
+        \file{auth.py}{authentication}
+        \file{rate\_limiter.py}{rate limiter}
+        \dir{routes}{routes}{
+          \file{users.py}{user routes}
+          \file{projects.py}{project routes}
+          \file{tasks.py}{task routes}
+          \file{reports.py}{report routes}
+          \file{admin.py}{admin routes}
+          \file{webhooks.py}{webhook routes}
+        }
+        \dir{schemas}{schemas}{
+          \file{user.py}{user schema}
+          \file{project.py}{project schema}
+          \file{task.py}{task schema}
+          \file{report.py}{report schema}
+        }
+      }
+      \dir{services}{service layer}{
+        \file{user\_service.py}{user service}
+        \file{project\_service.py}{project service}
+        \file{task\_service.py}{task service}
+        \file{notification\_service.py}{notifications}
+        \file{email\_service.py}{email service}
+        \file{cache\_service.py}{cache service}
+      }
+      \dir{database}{database layer}{
+        \file{connection.py}{connection mgmt}
+        \file{migrations.py}{migrations}
+        \dir{models}{ORM models}{
+          \file{user.py}{users table}
+          \file{project.py}{projects table}
+          \file{task.py}{tasks table}
+          \file{audit\_log.py}{audit log table}
+        }
+        \dir{repositories}{repositories}{
+          \file{user\_repo.py}{user repo}
+          \file{project\_repo.py}{project repo}
+          \file{task\_repo.py}{task repo}
+        }
+      }
+      \dir{utils}{utilities}{
+        \file{logger.py}{logging}
+        \file{config.py}{config}
+        \file{helpers.py}{helpers}
+        \file{validators.py}{validators}
+        \file{crypto.py}{crypto utils}
+      }
+    }
+    \dir[line color=teal]{frontend}{frontend app}{
+      \dir{src}{source}{
+        \dir{components}{components}{
+          \dir{common}{common}{
+            \file{Button.tsx}{button}
+            \file{Input.tsx}{input}
+            \file{Modal.tsx}{modal}
+            \file{Table.tsx}{table}
+            \file{Pagination.tsx}{pagination}
+            \file{Loading.tsx}{loading}
+            \file{ErrorBoundary.tsx}{error boundary}
+          }
+          \dir{layout}{layout}{
+            \file{Header.tsx}{header}
+            \file{Sidebar.tsx}{sidebar}
+            \file{Footer.tsx}{footer}
+            \file{MainContent.tsx}{main content}
+          }
+          \dir{pages}{pages}{
+            \file{Dashboard.tsx}{dashboard}
+            \file{ProjectList.tsx}{project list}
+            \file{ProjectDetail.tsx}{project detail}
+            \file{TaskBoard.tsx}{task board}
+            \file{UserProfile.tsx}{user profile}
+            \file{Settings.tsx}{settings}
+            \file{Login.tsx}{login}
+            \file{Register.tsx}{register}
+          }
+        }
+        \dir{hooks}{custom hooks}{
+          \file{useAuth.ts}{auth hook}
+          \file{useApi.ts}{api hook}
+          \file{useWebSocket.ts}{websocket hook}
+          \file{useLocalStorage.ts}{local storage hook}
+        }
+        \dir{stores}{stores}{
+          \file{authStore.ts}{auth state}
+          \file{projectStore.ts}{project state}
+          \file{uiStore.ts}{ui state}
+        }
+        \dir{utils}{utilities}{
+          \file{api.ts}{api client}
+          \file{format.ts}{format}
+          \file{validation.ts}{form validation}
+        }
+        \file{App.tsx}{app entry}
+        \file{index.tsx}{render entry}
+        \file{router.tsx}{router config}
+      }
+      \file{package.json}{dependencies}
+      \file{tsconfig.json}{typescript config}
+      \file{vite.config.ts}{vite config}
+    }
+    \dir[line color=orange]{devops}{devops \& deployment}{
+      \dir{docker}{docker config}{
+        \file{Dockerfile.backend}{backend image}
+        \file{Dockerfile.frontend}{frontend image}
+        \file{docker-compose.yml}{compose file}
+        \file{docker-compose.dev.yml}{dev compose}
+      }
+      \dir[line color=green]{k8s}{k8s config}{
+        \file{deployment.yaml}{deployment}
+        \file{service.yaml}{service}
+        \file{ingress.yaml}{ingress}
+        \file{configmap.yaml}{configmap}
+        \file{secret.yaml}{secret}
+        \file{hpa.yaml}{horizontal autoscaler}
+      }
+      \dir{ci}{CI}{
+        \file{.gitlab-ci.yml}{gitlab ci}
+        \file{Jenkinsfile}{jenkins pipeline}
+      }
+      \dir{monitoring}{monitoring}{
+        \file{prometheus.yml}{prometheus config}
+        \file{grafana-dashboard.json}{grafana dashboard}
+        \file{alertmanager.yml}{alert rules}
+      }
+    }
+    \file{README.md}{project readme}
+    \file{LICENSE}{license}
+    \file{.gitignore}{git ignore rules}
+    \file{Makefile}{build script}
+  }
+\end{dirtreex}
+
+\end{document}
