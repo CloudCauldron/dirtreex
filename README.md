@@ -40,13 +40,12 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 | Component | Notes |
 | :--- | :--- |
 | LuaLaTeX *or* pdfLaTeX | LuaLaTeX is required if your tree contains CJK or any non-Latin-1 text. |
-| e-TeX extensions (`\numexpr`, `\dimexpr`, `\ifcsname`) | Present in every modern TeX engine (pdfTeX, XeTeX, LuaTeX). The package checks at load time and refuses to load with a single clear error if they are missing. |
+| e-TeX extensions (`\numexpr`, `\dimexpr`, `\ifcsname`) | Present in every modern TeX engine (pdfTeX, XeTeX, LuaTeX) and guaranteed by the package's format requirement (`LaTeX2e` `2020/10/01` or later). |
 | TikZ 3.x | The `backgrounds` library is loaded automatically. |
 | `xcolor` | Both `color!mix!color` and `HTML` colour models are accepted. |
 | `pgfkeys` | Option parsing. |
 | `zref-abspage` | Cross-page anchoring. |
 | `environ` | Environment body capture (required for two-pass rendering). |
-| `xparse` | Argument parsing for `\dir` / `\file`. Bundled into LaTeX2e formats from 2020-10-01 onward, so the package's `\RequirePackage{xparse}` is a no-op on every modern engine; older formats fall back to the standalone `xparse` package. |
 
 No `-shell-escape`, no external tools, no Python helper.
 
@@ -361,7 +360,6 @@ If you have not changed anything that moves a break point, a single pass is enou
 | First entry on a continuation page has no `│` above its elbow | Only one compile pass has run so far | Run LaTeX again. The `Rerun LaTeX...` warning at `\end{document}` is already asking you to. |
 | Vertical columns stop halfway down the last piece | Same cause — `zref` has not seen the break yet | Run LaTeX again. |
 | CJK characters render as `□` or are missing | Wrong engine | Compile with LuaLaTeX (plus `ctex`). |
-| `! Package dirtreex Error: e-TeX primitives required` at `\usepackage` time | Running a non-e-TeX engine | Use pdfTeX, XeTeX, or LuaTeX. All modern distributions default to e-TeX. |
 | `! Package dirtreex Error: \dir used outside dirtreex environment` (same for `\file`) | A stray `\dir` or `\file` that is not inside `\begin{dirtreex}…\end{dirtreex}` | Wrap the call in a `dirtreex` environment. |
 | `! Package dirtreex Error: parsefour expects 1 or 4 comma-separated values` (or `parsetwo expects 1 or 2 …`) | `corners`, `margin`, `box break at`, or `tree break at` given with the wrong arity | Pass either a single value or the full set (four for `corners`/`margin`, two for the break-at keys). Remember the enclosing braces: `margin = {2pt, 4pt, 6pt, 8pt}`, not `margin = 2pt, 4pt, 6pt, 8pt`. |
 

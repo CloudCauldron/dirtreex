@@ -19,37 +19,10 @@
 \NeedsTeXFormat{LaTeX2e}[2020/10/01]
 \ProvidesPackage{dirtreex}[2026/04/26 v1.0 Enhanced directory tree package]
 
-%% ------------------------------------------------------------
-%%  Engine requirement check.
-%%
-%%  This package relies on the e-TeX extensions (\numexpr,
-%%  \dimexpr, \ifcsname) throughout. Without them the code below
-%%  would produce cascading "undefined control sequence" errors,
-%%  so we stop immediately with a single clear message.
-%%
-%%  The error text deliberately avoids naming any \if-family
-%%  primitive: TeX's conditional-skipping scanner tracks \if
-%%  nesting even inside argument braces, so mentioning e.g.
-%%  \ifcsname inside the surrounding \ifx would unbalance it.
-\expandafter\ifx\csname numexpr\endcsname\relax
-  \PackageError{dirtreex}%
-    {e-TeX primitives required (e.g. \string\numexpr, \string\dimexpr)}%
-    {Compile with a TeX engine that provides e-TeX -- pdfTeX,
-     XeTeX, and LuaTeX all qualify. On LaTeX2e this is the
-     default; if you see this, you are likely running a very
-     old engine or an unusual format.}%
-\fi
-\expandafter\ifx\csname numexpr\endcsname\relax \endinput \fi
-
 \RequirePackage{tikz}
 \usetikzlibrary{backgrounds}
-\RequirePackage{xcolor}
-\RequirePackage{pgfkeys}
 \RequirePackage{zref-abspage}
 \RequirePackage{environ}
-\RequirePackage{xparse}
-
-\makeatletter
 
 %% ============================================================
 %%  Booleans
@@ -1797,5 +1770,4 @@
   \fi
 }
 
-\makeatother
 \endinput
