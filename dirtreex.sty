@@ -22,7 +22,6 @@
 \RequirePackage{tikz}
 \usetikzlibrary{backgrounds}
 \RequirePackage{zref-abspage}
-\RequirePackage{environ}
 
 %% ============================================================
 %%  Booleans
@@ -1700,7 +1699,7 @@
     \fi
   \fi
 }
-\NewEnviron{dirtreex}[1][]{%
+\NewDocumentEnvironment{dirtreex}{O{}+b}{%
   \begingroup
   \dte@inenvtrue
   \global\advance\dte@tnum by 1\relax
@@ -1716,7 +1715,7 @@
   % Execute the environment body once in a throwaway box to
   % collect entry data via \dir / \file. Nothing is typeset yet
   % at this stage.
-  \setbox0=\vbox{\BODY}%
+  \setbox0=\vbox{#2}%
   %
   \ifnum\dte@cnt=0\relax
     \PackageWarning{dirtreex}{Empty dirtreex environment; nothing rendered.}%
