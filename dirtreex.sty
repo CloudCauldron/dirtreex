@@ -98,6 +98,7 @@
 \newbox\dte@framebox      % the tree as a single vbox, before splitting
 \newbox\dte@splitresult   % one \vsplit chunk of the above
 \newbox\dte@extbox        % reserved for extension drawing
+\newbox\dte@bodybox       % discardable env-body capture; never unboxed
 
 %% ============================================================
 %%  Style defaults
@@ -350,7 +351,7 @@
 %% ============================================================
 %%  \dir / \file  (public API, with optional per-entry style)
 %% ============================================================
-\NewDocumentCommand{\dir}{O{} m m +m}{%
+\NewDocumentCommand{\dir}{O{} m m}{%
   \ifdte@inenv\else
     \PackageError{dirtreex}%
       {\string\dir\space used outside dirtreex environment}%
@@ -360,16 +361,67 @@
   \global\advance\dte@cnt by 1\relax
   \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{1}%
   \dte@store@entry@opts{#1}{\the\dte@cnt}%
-  % Advance \dte@depth for children, scoped to a local group so
-  % \endgroup restores it automatically even if an error occurs
-  % inside #4. The parent's depth has already been captured by
-  % \dte@estore above, so each child's \the\dte@depth reads the
-  % group-local advanced value while every stored depth remains
-  % frozen at its original call-time value.
-  \begingroup
-    \advance\dte@depth by 1\relax
-    #4%
-  \endgroup
+  \dte@kids
+}
+
+%% ------------------------------------------------------------
+%%  \dte@kids — wait for the children-block opening `{', then
+%%  absorb it without pre-tokenising what follows. Tolerates any
+%%  number of \par tokens (blank lines in source) between
+%%  \dir{n}{c} and the children block.
+%%
+%%  Two combined idioms:
+%%
+%%  (a) \par skipping. \@ifnextchar peeks past spaces (via
+%%      \@xifnch) but NOT past \par tokens. Blank lines in TeX
+%%      source tokenise to \par, and LaTeX users idiomatically
+%%      separate command args with blank lines, so we have to
+%%      drain them ourselves. \dte@kids@eatpar consumes one \par
+%%      via a \long-arg macro and recurses, draining arbitrarily
+%%      many blank lines.
+%%
+%%  (b) Brace absorb. Standard \afterassignment + \let idiom:
+%%        1. \afterassignment\dte@kids@enter queues the next macro.
+%%        2. \let\dte@kids@brace= consumes EXACTLY one token from
+%%           the input. The next character is the user's `{'; TeX
+%%           tokenises it as a cat-1 begin-group token; \let stores
+%%           it as an implicit \bgroup on \dte@kids@brace.
+%%           Crucially, NOTHING after the `{' has been read yet.
+%%        3. \afterassignment fires: \dte@kids@enter is inserted.
+%%        4. \dte@kids@enter expands \dte@kids@brace, which opens
+%%           a real TeX group. Inside that group, tokens are read
+%%           live from the input stream — so any nested \verbdir/
+%%           \verbfile sees its |...| bytes as raw input.
+%%        5. \advance\dte@depth is local; the user's matching `}'
+%%           closes the group and rolls depth back automatically.
+%%
+%%  Anything between \dir{n}{c} and `{...}' that is not whitespace,
+%%  \par, or `{' falls through to \dte@kids@error. The caller must
+%%  follow `\dir{n}{c}' with an explicit `{...}' children block
+%%  (use `{}' for no children).
+\def\dte@kids{%
+  \@ifnextchar\par
+    {\dte@kids@eatpar}%
+    {\@ifnextchar\bgroup{\dte@kids@absorb}{\dte@kids@error}}%
+}
+\long\def\dte@kids@eatpar#1{\dte@kids}   % \long lets #1 absorb \par
+\def\dte@kids@absorb{%
+  \afterassignment\dte@kids@enter
+  \let\dte@kids@brace= % NB: trailing space is significant — \let needs a separator
+}
+\def\dte@kids@enter{%
+  \dte@kids@brace          % implicit \bgroup -> opens a real TeX group
+  \advance\dte@depth by 1\relax
+}
+\def\dte@kids@error{%
+  \PackageError{dirtreex}%
+    {Children block required after \string\dir\space
+     (or \string\verbdir/\string\archive) arguments}%
+    {After \string\dir\detokenize{{name}{comment}} you must follow
+     with \detokenize{`{...}'} (the children block). Blank lines
+     between them are fine. Found a non-brace token instead ---
+     check for stray text or macros between the comment and the
+     children block.}%
 }
 
 \NewDocumentCommand{\file}{O{} m m}{%
@@ -377,6 +429,52 @@
     \PackageError{dirtreex}%
       {\string\file\space used outside dirtreex environment}%
       {Every \string\file\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{0}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+}
+
+%% ============================================================
+%%  \verbdir / \verbfile  (verbatim name variants)
+%% ============================================================
+%% The name argument (#2) is read verbatim using xparse's `v'
+%% type. The opening delimiter is the first non-letter,
+%% non-space character; the matching delimiter closes the arg.
+%% Catcodes inside the v scope are set to "other" (12), so the
+%% common dangerous bytes — _ $ & # ^ ~ % \ { } — are captured
+%% as harmless character tokens.
+%%
+%% RESTRICTIONS (document in README):
+%%   - The chosen delimiter cannot appear inside the path.
+%%   - Spaces and tabs in the path are preserved as active tokens
+%%     (cat 13) per xparse's v grabber, which is what the render
+%%     path expects under \dte@textstyle = \ttfamily; they typeset
+%%     as ordinary monospace whitespace glyphs.
+%%   - The verbatim arg must be readable directly from source —
+%%     it cannot be wrapped in another macro that pre-tokenises.
+%%     `\verbfile|...|' written inside `\dir{...}{...}{ ... }'
+%%     works because the children block is a live TeX group
+%%     (see \dte@kids), not a captured token list.
+\NewDocumentCommand{\verbdir}{O{} v m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\verbdir\space used outside dirtreex environment}%
+      {Every \string\verbdir\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{1}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@kids
+}
+
+\NewDocumentCommand{\verbfile}{O{} v m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\verbfile\space used outside dirtreex environment}%
+      {Every \string\verbfile\space must appear inside the body of a
        dirtreex environment.}%
   \fi
   \global\advance\dte@cnt by 1\relax
@@ -1699,7 +1797,7 @@
     \fi
   \fi
 }
-\NewDocumentEnvironment{dirtreex}{O{}+b}{%
+\NewDocumentEnvironment{dirtreex}{O{}}{%
   \begingroup
   \dte@inenvtrue
   \global\advance\dte@tnum by 1\relax
@@ -1712,10 +1810,16 @@
   \pgfkeys{/dte/.cd,#1}%
   \dte@enforce@boxfalse@breakat
   %
-  % Execute the environment body once in a throwaway box to
-  % collect entry data via \dir / \file. Nothing is typeset yet
-  % at this stage.
-  \setbox0=\vbox{#2}%
+  % Open the collection vbox in stream. The body executes
+  % between this \bgroup and the \egroup in the end-code.
+  % \dir / \file / \verbdir / \verbfile write their entry
+  % data via \xdef / \gdef (global), so the data survives the
+  % \egroup-induced group teardown. \dte@bodybox is
+  % discard-only; never \unvbox'd.
+  \setbox\dte@bodybox=\vbox\bgroup
+    \dte@inenvtrue   % re-assert inside the vbox group (defensive)
+}{%
+  \egroup            % closes the \vbox\bgroup; \dte@bodybox now holds the discardable body
   %
   \ifnum\dte@cnt=0\relax
     \PackageWarning{dirtreex}{Empty dirtreex environment; nothing rendered.}%
@@ -1745,7 +1849,6 @@
       \global\dte@bls=\baselineskip
       \dte@render@tree
     }%
-    %
     \dte@output@framed
   \fi
   %

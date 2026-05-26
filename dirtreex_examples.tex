@@ -1470,4 +1470,104 @@ A realistic tree large enough to span three or more pages. It exercises every cr
   }
 \end{dirtreex}
 
+\clearpage
+
+% ============================================================
+\section{Verbatim names}
+% ============================================================
+
+These examples use the verbatim variants \verb|\verbdir| / \verb|\verbfile|. The path argument is read under xparse's \verb|v| specifier; catcodes inside the chosen delimiters are set to 12 (``other''), so common dangerous bytes survive as literal glyphs.
+
+\subsection{Top-level verbatim file}
+
+A single \verb|\verbfile| with an underscore and a dollar sign in the name:
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \verbfile|app_$STAGE.toml|{environment-templated config}
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \verbfile|app_$STAGE.toml|{environment-templated config}
+\end{dirtreex}
+
+\subsection{Nested verbdir containing verbfile}
+
+A \verb|\verbfile| or \verb|\verbdir| nested inside another \verb|\verbdir|'s children block works because the children block is a live TeX group --- the inner \verb|v| argument reads its delimiter pair directly from the source, with no intervening tokenisation step.
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \verbdir|src/data_$|{data root with dollar in name}{%
+    \verbfile|users_2026-01.parquet|{snapshot}%
+    \verbfile|conf{prod}.yaml|{production config}%
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \verbdir|src/data_$|{data root with dollar in name}{%
+    \verbfile|users_2026-01.parquet|{snapshot}%
+    \verbfile|conf{prod}.yaml|{production config}%
+  }
+\end{dirtreex}
+
+\subsection{Mixed normal and verbatim siblings}
+
+\verb|\dir| / \verb|\file| (normal-catcode names) and \verb|\verbdir| / \verb|\verbfile| (verbatim names) coexist freely inside the same children block.
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{project}{root}{%
+    \dir{src}{source}{%
+      \file{main.py}{}%
+      \verbfile|loader_$.py|{verbatim sibling}%
+    }%
+    \verbdir|cfg_%|{verbatim dir sibling}{%
+      \file{default.yaml}{}%
+    }%
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{project}{root}{%
+    \dir{src}{source}{%
+      \file{main.py}{}%
+      \verbfile|loader_$.py|{verbatim sibling}%
+    }%
+    \verbdir|cfg_%|{verbatim dir sibling}{%
+      \file{default.yaml}{}%
+    }%
+  }
+\end{dirtreex}
+
+\subsection{Pipe (\texttt{|}) in the path --- alternative delimiter}
+
+The default delimiter shown above is \verb=|=, but \emph{any} non-letter, non-space character may be chosen. Pick one that does not appear in the path. Below, \verb=+= and \verb=/= are used as delimiters so a literal \verb=|= survives in the name:
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{shell-pipelines}{names that contain a literal |}{%
+    \verbfile+a|b|c+{+ as delimiter}%
+    \verbfile/ps aux | grep python/{/ as delimiter}%
+    \verbdir!logs|archive!{! as delimiter}{%
+      \verbfile=out|err.log={= as delimiter, file inside}%
+    }%
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{shell-pipelines}{names that contain a literal |}{%
+    \verbfile+a|b|c+{+ as delimiter}%
+    \verbfile/ps aux | grep python/{/ as delimiter}%
+    \verbdir!logs|archive!{! as delimiter}{%
+      \verbfile=out|err.log={= as delimiter, file inside}%
+    }%
+  }
+\end{dirtreex}
+
+A delimiter \emph{collision} corrupts silently rather than erroring: \verb=\verbfile|a|b|{c}= takes \verb=|a|= as the name and \verb=b= as the comment, leaving \verb=|{c}= as stray tokens. Pick a delimiter that never appears in the names you intend to write.
+
 \end{document}

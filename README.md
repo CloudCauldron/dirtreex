@@ -19,19 +19,20 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 2. [Installation](#2-installation)
 3. [Quick start](#3-quick-start)
 4. [Entries: `\dir` and `\file`](#4-entries-dir-and-file)
-5. [Environment options](#5-environment-options)
-   - 5.1 [Top-level keys](#51-top-level-keys)
-   - 5.2 [The `box` family](#52-the-box-family)
-   - 5.3 [The `pagebreak` family](#53-the-pagebreak-family)
-   - 5.4 [Per-entry overrides](#54-per-entry-overrides)
-6. [Cross-page behaviour](#6-cross-page-behaviour)
-7. [Example gallery](#7-example-gallery)
-8. [Compilation](#8-compilation)
-9. [Troubleshooting](#9-troubleshooting)
-10. [Limitations](#10-limitations)
-11. [Project files](#11-project-files)
-12. [Contact](#12-contact)
-13. [License](#13-license)
+5. [Verbatim names: `\verbdir` and `\verbfile`](#5-verbatim-names-verbdir-and-verbfile)
+6. [Environment options](#6-environment-options)
+   - 6.1 [Top-level keys](#61-top-level-keys)
+   - 6.2 [The `box` family](#62-the-box-family)
+   - 6.3 [The `pagebreak` family](#63-the-pagebreak-family)
+   - 6.4 [Per-entry overrides](#64-per-entry-overrides)
+7. [Cross-page behaviour](#7-cross-page-behaviour)
+8. [Example gallery](#8-example-gallery)
+9. [Compilation](#9-compilation)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Limitations](#11-limitations)
+12. [Project files](#12-project-files)
+13. [Contact](#13-contact)
+14. [License](#14-license)
 
 ---
 
@@ -45,7 +46,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 | `xcolor` | Both `color!mix!color` and `HTML` colour models are accepted. |
 | `pgfkeys` | Option parsing. |
 | `zref-abspage` | Cross-page anchoring. |
-| `environ` | Environment body capture (required for two-pass rendering). |
+| `xparse` (auto-loaded by LaTeX2e) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile`. |
 
 No `-shell-escape`, no external tools, no Python helper.
 
@@ -97,7 +98,7 @@ This produces a framed tree where each line is `<name> … <comment>` joined wit
 - **`<name>`** is typeset in `\ttfamily`. For `\dir`, a trailing `/` is appended automatically — write `src`, not `src/`.
 - **`<comment>`** is typeset in `\rmfamily` and joined to `<name>` with a dot leader. Pass `{}` for no comment (the dot leader also disappears).
 - **`<children>`** is a run of further `\dir` / `\file` calls. You do **not** supply the depth — the package tracks it from the nesting.
-- **`<entry options>`** are optional and described in §5.4.
+- **`<entry options>`** are optional and described in §6.4.
 
 ### 4.1 Multi-line comments
 
@@ -152,11 +153,59 @@ Because both identifiers contain `@`, the override has to sit between `\makeatle
 
 ---
 
-## 5. Environment options
+## 5. Verbatim names: `\verbdir` and `\verbfile`
+
+`\dir` and `\file` accept LaTeX-tokenised name arguments — paths containing `_`, `$`, `&`, `#`, `^`, `~`, `%`, or `\` need to be escaped (`\_`, `\$`, etc.) or wrapped in `\detokenize{}`. For paths where this is inconvenient, `dirtreex` provides two verbatim variants:
+
+```latex
+\verbdir[<entry options>]|<path>|{<comment>}{<children>}
+\verbfile[<entry options>]|<path>|{<comment>}
+```
+
+The path is read with xparse's `v` (verbatim) specifier: the first non-letter, non-space character after the macro name is the opening delimiter, the matching delimiter closes the path, and every byte in between is captured at catcode 12 ("other"). Comment and children retain full LaTeX catcodes — you can still write `$x^2$`, `\textbf{...}`, `\\` inside the comment, and nested `\dir` / `\file` / `\verbdir` / `\verbfile` inside the children block work normally.
+
+### 5.1 Example
+
+```latex
+\begin{dirtreex}
+  \verbdir|src/$ENV/data_v2|{environment-keyed data root}{%
+    \verbfile|users_2026-01.parquet|{snapshot}%
+    \verbfile|conf{prod}.yaml|{production config}%
+  }
+\end{dirtreex}
+```
+
+### 5.2 Restrictions
+
+- **The chosen delimiter cannot appear inside the path.** Pick one that doesn't collide:
+
+  ```latex
+  \verbfile|a/b|{...}        % | as delimiter
+  \verbfile+a|b+{...}        % + as delimiter, | survives in the path
+  \verbfile/a|b+c/{...}      % / as delimiter, | and + survive
+  ```
+
+  **Delimiter collisions corrupt SILENTLY.** Writing `\verbfile|foo|bar|{c}` makes xparse take `|foo|` as the name and `b` as the comment, leaving `ar|{c}` as stray tokens — no error fires. Pick a delimiter that does not appear in any of your paths.
+
+- **The verbatim argument must be readable directly from source.** If you wrap `\verbfile|...|` inside another macro that captures its argument as a token list (e.g., a user-side `\newcommand` that takes `+m`), the path is tokenised at the wrapper's call site — before `\verbfile` can re-catcode it — and the verbatim semantics are lost. The children block of `\dir` and `\verbdir` does **not** suffer from this: it is a live TeX group, not a captured token list, so `\verbfile|...|` written inside `\dir{...}{...}{ ... }` works as expected.
+
+- **Encoding.** Under T1 / TU encoding (LuaLaTeX default, or pdfLaTeX with `\usepackage[T1]{fontenc}`), every cat-12 character renders as its literal glyph in monospace. If you target legacy OT1 encoding, the special characters `_` and `&` may require explicit `\char` mapping — pick an encoding that supports them.
+
+### 5.3 Where verbatim names are useful
+
+- Paths with parameter substitutions (`$ENV`, `${VAR}`).
+- Windows paths (`C:\Users\foo`).
+- Configuration filenames (`conf{prod}.yaml`, `app_$STAGE.toml`).
+- Database identifiers (`schema$ext.table_v2`).
+- Log file patterns (`err_$.log`, `out_%Y-%m-%d.log`).
+
+---
+
+## 6. Environment options
 
 Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. Spaces around `=` are allowed.
 
-### 5.1 Top-level keys
+### 6.1 Top-level keys
 
 | Key | Default | Meaning |
 | :--- | :--- | :--- |
@@ -164,10 +213,10 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
 | `line width` | `0.4pt` | Default rule width for all connectors. |
 | `elbow radius` | `0pt` | Elbow geometry. `0pt` (the default) gives sharp `└`/`├` right angles; any positive length gives rounded arcs of that radius. Clamped against `0.5\baselineskip` and against `line width` for legibility. |
-| `box` | see §5.2 | Frame settings. |
-| `pagebreak` | see §5.3 | Page-break settings. |
+| `box` | see §6.2 | Frame settings. |
+| `pagebreak` | see §6.3 | Page-break settings. |
 
-### 5.2 The `box` family
+### 6.2 The `box` family
 
 Pass as a sub-list: `box = { … }`.
 
@@ -192,7 +241,7 @@ Example:
 ]
 ```
 
-### 5.3 The `pagebreak` family
+### 6.3 The `pagebreak` family
 
 | Subkey | Default | Meaning |
 | :--- | :--- | :--- |
@@ -200,7 +249,7 @@ Example:
 | `box break at` | `0pt` | Vertical gap between the frame's torn edge and the page boundary. Single value applies to both sides of every break; two values = `first-piece-bottom, next-piece-top`. |
 | `tree break at` | `1em` (`0pt` when `box=false`) | Same, but applied to the tree's extension rules rather than to the border itself. Useful when the frame should reach the page edge while the internal tree lines pull back. |
 
-### 5.4 Per-entry overrides
+### 6.4 Per-entry overrides
 
 Any `\dir` or `\file` can take the same `line color`, `line width`, and `elbow radius` keys. They override the environment-level defaults **for that entry's connector only**:
 
@@ -215,7 +264,7 @@ Each entry owns its own `└`-shape. The vertical line continuing **down** from 
 
 ---
 
-## 6. Cross-page behaviour
+## 7. Cross-page behaviour
 
 When the finished tree is taller than the space left on the current page, `dirtreex` cuts it into pieces and emits them on consecutive pages. Each piece is drawn as a self-contained TikZ `\node`, so the border, background, and all active `│` columns continue across the break.
 
@@ -230,11 +279,11 @@ Concretely:
 
 ---
 
-## 7. Example gallery
+## 8. Example gallery
 
 The snippets below are self-contained: drop any of them into a document with `\usepackage{dirtreex}` and they compile. For a much broader set of worked examples — every option, every combination, every edge case — see `dirtreex_examples.tex` in the repository root.
 
-### 7.1 Defaults
+### 8.1 Defaults
 
 ```latex
 \begin{dirtreex}
@@ -248,7 +297,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
 \end{dirtreex}
 ```
 
-### 7.2 Rounded elbows
+### 8.2 Rounded elbows
 
 ```latex
 \begin{dirtreex}[elbow radius = 3pt]
@@ -263,7 +312,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
 \end{dirtreex}
 ```
 
-### 7.3 Per-branch colours
+### 8.3 Per-branch colours
 
 ```latex
 \begin{dirtreex}[
@@ -285,7 +334,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
 \end{dirtreex}
 ```
 
-### 7.4 Thick lines
+### 8.4 Thick lines
 
 ```latex
 \begin{dirtreex}[
@@ -301,7 +350,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
 \end{dirtreex}
 ```
 
-### 7.5 A tree that pages across
+### 8.5 A tree that pages across
 
 ```latex
 \begin{dirtreex}[
@@ -322,7 +371,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
 
 The border, background, and all active `│` columns continue onto the next page; the first visible entry on that page shows a full `│` stem above its elbow. Colours are carried across the page break seamlessly.
 
-### 7.6 Asymmetric margin
+### 8.6 Asymmetric margin
 
 ```latex
 \begin{dirtreex}[
@@ -337,7 +386,7 @@ The border, background, and all active `│` columns continue onto the next page
 
 ---
 
-## 8. Compilation
+## 9. Compilation
 
 ```bash
 lualatex -interaction=nonstopmode yourdoc.tex
@@ -353,7 +402,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | :--- | :--- | :--- |
@@ -365,7 +414,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 
 ---
 
-## 10. Limitations
+## 11. Limitations
 
 - Extremely small `box.margin` combined with a very large `elbow radius` crowds the corner; the internal clamp (`connE ≤ 0.5\baselineskip`) keeps things legible but will not rescue pathological values.
 - The anchor search compares `zref` page numbers as digit strings. Safe today; be aware if a future `zref` change makes that field non-numeric.
@@ -373,7 +422,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 
 ---
 
-## 11. Project files
+## 12. Project files
 
 | Path | What it is |
 | :--- | :--- |
@@ -384,7 +433,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 
 ---
 
-## 12. Contact
+## 13. Contact
 
 - **Maintainer:** CloudCauldron
 - **Email:** <w.yizheng@qq.com>
@@ -394,12 +443,12 @@ Bug reports, feature suggestions, and patches are welcome via either channel.
 
 ---
 
-## 13. License
+## 14. License
 
 Released under the [LaTeX Project Public License, version 1.3c](https://www.latex-project.org/lppl.txt) (`LPPL-1.3c`); see [`LICENSE`](LICENSE) for the full text. Maintenance status is `author-maintained`; the Current Maintainer is CloudCauldron (<w.yizheng@qq.com>).
 
 ---
 
-## 14. About the Development
+## 15. About the Development
 
 This project includes code generated with the assistance of AI tools. All such code has been reviewed and integrated by the maintainer.
