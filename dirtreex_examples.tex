@@ -209,6 +209,80 @@ This document walks through the full feature surface of the \texttt{dirtreex} pa
 \clearpage
 
 % ============================================================
+\section{Archive nodes}
+% ============================================================
+
+\verb|\archive| is shape-identical to \verb|\dir| (takes a children block, accepts the same per-entry override keys) but renders its name \emph{without} the trailing \verb|/|. Use it for archive-like containers (\verb|.tar.gz|, \verb|.zip|, \verb|.jar|, \ldots) whose contents you still want to display nested in the tree. Internally the three entry commands are distinguished by the \verb|t| slot --- \verb|\dir| stores~1, \verb|\file| stores~0, \verb|\archive| stores~2 --- which the public hook \verb|\DirtreexFormatName| reads to decide whether to append \verb|/|.
+
+\subsection{Default archive at the top level}
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \archive{release-2026.tar.gz}{shipped tarball}{
+    \file{manifest.json}{contents listing}
+    \file{LICENSE}{}
+    \dir{bin}{executables}{
+      \file{dirtreex.sty}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \archive{release-2026.tar.gz}{shipped tarball}{
+    \file{manifest.json}{contents listing}
+    \file{LICENSE}{}
+    \dir{bin}{executables}{
+      \file{dirtreex.sty}{}
+    }
+  }
+\end{dirtreex}
+
+Compare the root entry \texttt{release-2026.tar.gz} (no trailing \texttt{/}) with the nested \texttt{bin/} directory underneath it.
+
+\subsection{Archive nested inside a directory}
+
+Archives mix freely with directories at any depth. The depth tracker treats \verb|\archive| as a container just like \verb|\dir|, so the elbow geometry and active-trunk bookkeeping carry over unchanged.
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir{project}{root}{
+    \dir{dist}{distribution outputs}{
+      \archive{project-1.0.zip}{user download}{
+        \file{README.md}{}
+        \file{install.sh}{}
+      }
+      \archive{project-1.0-src.tar.gz}{source bundle}{
+        \dir{src}{}{
+          \file{main.c}{}
+        }
+      }
+    }
+    \file{Makefile}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir{project}{root}{
+    \dir{dist}{distribution outputs}{
+      \archive{project-1.0.zip}{user download}{
+        \file{README.md}{}
+        \file{install.sh}{}
+      }
+      \archive{project-1.0-src.tar.gz}{source bundle}{
+        \dir{src}{}{
+          \file{main.c}{}
+        }
+      }
+    }
+    \file{Makefile}{}
+  }
+\end{dirtreex}
+
+\clearpage
+
+% ============================================================
 \section{Font size}
 % ============================================================
 
@@ -1476,7 +1550,7 @@ A realistic tree large enough to span three or more pages. It exercises every cr
 \section{Verbatim names}
 % ============================================================
 
-These examples use the verbatim variants \verb|\verbdir| / \verb|\verbfile|. The path argument is read under xparse's \verb|v| specifier; catcodes inside the chosen delimiters are set to 12 (``other''), so common dangerous bytes survive as literal glyphs.
+These examples use the verbatim variants \verb|\verbdir| / \verb|\verbfile| / \verb|\verbarchive|. The path argument is read under xparse's \verb|v| specifier; catcodes inside the chosen delimiters are set to 12 (``other''), so common dangerous bytes survive as literal glyphs.
 
 \subsection{Top-level verbatim file}
 
@@ -1512,9 +1586,29 @@ A \verb|\verbfile| or \verb|\verbdir| nested inside another \verb|\verbdir|'s ch
   }
 \end{dirtreex}
 
+\subsection{Verbatim archive name}
+
+\verb|\verbarchive| is the verbatim sibling of \verb|\archive| --- container-shaped (children block, no trailing \verb|/|), but with the path read at catcode~12. Useful when an archive's filename contains shell metacharacters or template placeholders that would otherwise need escaping.
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \verbarchive|build_$STAGE.tar.gz|{templated archive name}{%
+    \verbfile|manifest_$.json|{}%
+    \verbfile|conf{prod}.yaml|{}%
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \verbarchive|build_$STAGE.tar.gz|{templated archive name}{%
+    \verbfile|manifest_$.json|{}%
+    \verbfile|conf{prod}.yaml|{}%
+  }
+\end{dirtreex}
+
 \subsection{Mixed normal and verbatim siblings}
 
-\verb|\dir| / \verb|\file| (normal-catcode names) and \verb|\verbdir| / \verb|\verbfile| (verbatim names) coexist freely inside the same children block.
+\verb|\dir| / \verb|\file| / \verb|\archive| (normal-catcode names) and \verb|\verbdir| / \verb|\verbfile| / \verb|\verbarchive| (verbatim names) coexist freely inside the same children block.
 
 \begin{Verbatim}
 \begin{dirtreex}
@@ -1569,5 +1663,69 @@ The default delimiter shown above is \verb=|=, but \emph{any} non-letter, non-sp
 \end{dirtreex}
 
 A delimiter \emph{collision} corrupts silently rather than erroring: \verb=\verbfile|a|b|{c}= takes \verb=|a|= as the name and \verb=b= as the comment, leaving \verb=|{c}= as stray tokens. Pick a delimiter that never appears in the names you intend to write.
+
+\clearpage
+
+% ============================================================
+\section{Icon dispatch with \texttt{\textbackslash DirtreexFormatName}}
+% ============================================================
+
+The public hook \verb|\DirtreexFormatName| controls how each entry's name is typeset. Override it with \verb|\renewcommand| and dispatch on the entry's \verb|t| slot (0 for files, 1 for directories, 2 for archives) to attach per-type icons. The example below pulls three PNG glyphs from the \verb|assets/| directory shipped with this repository and renders one in front of every entry name:
+
+\begin{Verbatim}
+\newcommand{\dteicon}[1]{%
+  \raisebox{-.15em}{\includegraphics[height=.9em]{assets/#1}}%
+  \kern0.5\fontdimen2\font}
+\renewcommand{\DirtreexFormatName}[1]{%
+  \ifcase\DirtreexGetField{#1}{t}%
+    \dteicon{python.png}\DirtreexGetField{#1}{n}%                % t=0 file
+  \or
+    \dteicon{directory.png}\DirtreexGetField{#1}{n}/%            % t=1 directory
+  \or
+    \dteicon{zip_file.png}\DirtreexGetField{#1}{n}%              % t=2 archive
+  \fi
+}
+\begin{dirtreex}
+  \verbdir|project_$STAGE|{Python application}{
+    \dir{src}{source code}{
+      \file{main.py}{entry point}
+      \file{util.py}{helpers}
+    }
+    \archive{vendor.zip}{bundled dependencies}{
+      \file[line style = densely dashed]{numpy.py}{}
+      \file[line style = densely dashed]{pandas.py}{}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begingroup
+\newcommand{\dteicon}[1]{%
+  \raisebox{-.15em}{\includegraphics[height=.9em]{assets/#1}}%
+  \kern0.5\fontdimen2\font}
+\renewcommand{\DirtreexFormatName}[1]{%
+  \ifcase\DirtreexGetField{#1}{t}%
+    \dteicon{python.png}\DirtreexGetField{#1}{n}%
+  \or
+    \dteicon{directory.png}\DirtreexGetField{#1}{n}/%
+  \or
+    \dteicon{zip_file.png}\DirtreexGetField{#1}{n}%
+  \fi
+}
+\begin{dirtreex}
+  \verbdir|project_$STAGE|{Python application}{
+    \dir{src}{source code}{
+      \file{main.py}{entry point}
+      \file{util.py}{helpers}
+    }
+    \archive{vendor.zip}{bundled dependencies}{
+      \file[line style = densely dashed]{numpy.py}{}
+      \file[line style = densely dashed]{pandas.py}{}
+    }
+  }
+\end{dirtreex}
+\endgroup
+
+The \verb|\begingroup|/\verb|\endgroup| wrapper scopes both \verb|\newcommand| and \verb|\renewcommand|, so the override does not leak into anything compiled after this section. To apply the icons document-wide, place the two definitions in your preamble instead.
 
 \end{document}

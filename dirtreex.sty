@@ -1,5 +1,5 @@
 %% dirtreex.sty — Enhanced directory tree rendering with TikZ
-%% v1.0  2026/04/26
+%% v1.1  2026/05/27
 %%
 %% Copyright (C) 2026 CloudCauldron <w.yizheng@qq.com>
 %% Repository: https://github.com/CloudCauldron/dirtreex
@@ -17,7 +17,7 @@
 %%
 %% This work consists of the file dirtreex.sty.
 \NeedsTeXFormat{LaTeX2e}[2020/10/01]
-\ProvidesPackage{dirtreex}[2026/04/26 v1.0 Enhanced directory tree package]
+\ProvidesPackage{dirtreex}[2026/05/27 v1.1 Enhanced directory tree package]
 
 \RequirePackage{tikz}
 \usetikzlibrary{backgrounds}
@@ -139,6 +139,8 @@
 %% \dte@breakat@phase{pre} (see environment open).
 
 \def\dte@linecolor{black}
+\def\dte@linestyle{solid}
+\def\dte@ls@solid{solid}
 
 %% ============================================================
 %%  pgfkeys — option interface
@@ -258,6 +260,7 @@
   /dte/.cd,
   line color/.store in=\dte@linecolor,
   line width/.code={\dte@rulewidth=#1\relax},
+  line style/.store in=\dte@linestyle,
   %% --- elbow shape ---
   %% A single key controls the elbow geometry: 0pt (the default)
   %% produces sharp `└`/`├` right angles; any positive length gives
@@ -265,13 +268,14 @@
   %% \dte@draw@connector reads the resolved dimen directly.
   elbow radius/.code={\dte@elbowR=#1\relax},
   %% --- per-entry style overrides (consumed by \dir[...] / \file[...]) ---
-  %% The three handlers below write to LOCAL temps; \dte@store@entry@opts
+  %% The four handlers below write to LOCAL temps; \dte@store@entry@opts
   %% wraps its call to \pgfkeys in \begingroup/\endgroup so the temps
   %% never escape to global scope. Do NOT change these to \gdef without
   %% also removing the surrounding group at the consumer site.
   /dte/entry/.cd,
   line color/.code={\def\dte@tmp@entry@lc{#1}},
   line width/.code={\def\dte@tmp@entry@lw{#1}},
+  line style/.code={\def\dte@tmp@entry@ls{#1}},
   elbow radius/.code={\def\dte@tmp@entry@er{#1}},
 }
 
@@ -302,6 +306,7 @@
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i a\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i lc\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i lw\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i ls\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i er\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@pos@\the\dte@i\endcsname\relax
       \advance\dte@i by 1\relax
@@ -353,10 +358,11 @@
 %% ============================================================
 %% Each entry is stored as a family of csname'd macros keyed by
 %% its 1-based index N and a single-letter field suffix:
-%%   d = depth, n = name, c = comment, t = type (1=dir, 0=file),
-%%   l = is-last-child flag, a = active-depth list,
+%%   d  = depth, n = name, c = comment,
+%%   t  = type (1=dir, 0=file, 2=archive),
+%%   l  = is-last-child flag, a = active-depth list,
 %%   lc = line colour override, lw = line width override,
-%%   er = elbow-radius override.
+%%   ls = line style override, er = elbow-radius override.
 %% Depth and type are \xdef'd (they are numeric literals and
 %% safe to expand); the remaining textual fields are \gdef'd to
 %% preserve any unexpanded tokens the user supplied.
@@ -369,27 +375,29 @@
 \def\dte@eget#1#2{\csname dte@e#1#2\endcsname}
 
 %% Parse the optional bracketed style block of a \dir[...] or
-%% \file[...] call and bind the three per-entry override slots.
+%% \file[...] call and bind the four per-entry override slots.
 %%   #1 = option string, #2 = entry index.
-%% The three slots always exist after this call (possibly empty),
+%% The four slots always exist after this call (possibly empty),
 %% which simplifies downstream retrieval.
 %%
-%% \dte@tmp@entry@{lc,lw,er} are LOCAL temporaries -- they live only
-%% between \begingroup and \endgroup here. The pgfkeys handlers
+%% \dte@tmp@entry@{lc,lw,ls,er} are LOCAL temporaries -- they live
+%% only between \begingroup and \endgroup here. The pgfkeys handlers
 %% under /dte/entry/.cd (above) also use \def (not \gdef) so the
-%% user-supplied value is written at the same group level. The three
+%% user-supplied value is written at the same group level. The four
 %% \xdef writes inside the group store the per-entry override
 %% globally; reading the local temps at \xdef time is fine because
 %% expansion happens before \endgroup fires.
 \def\dte@store@entry@opts#1#2{%
   \begingroup
-    \def\dte@tmp@entry@lc{}\def\dte@tmp@entry@lw{}\def\dte@tmp@entry@er{}%
+    \def\dte@tmp@entry@lc{}\def\dte@tmp@entry@lw{}%
+    \def\dte@tmp@entry@ls{}\def\dte@tmp@entry@er{}%
     \def\dte@tmp@opts{#1}%
     \ifx\dte@tmp@opts\@empty\else
       \pgfkeys{/dte/entry/.cd,#1}%
     \fi
     \expandafter\xdef\csname dte@e#2lc\endcsname{\dte@tmp@entry@lc}%
     \expandafter\xdef\csname dte@e#2lw\endcsname{\dte@tmp@entry@lw}%
+    \expandafter\xdef\csname dte@e#2ls\endcsname{\dte@tmp@entry@ls}%
     \expandafter\xdef\csname dte@e#2er\endcsname{\dte@tmp@entry@er}%
   \endgroup
 }
@@ -462,7 +470,8 @@
 \def\dte@kids@error{%
   \PackageError{dirtreex}%
     {Children block required after \string\dir\space
-     (or \string\verbdir/\string\archive) arguments}%
+     (or \string\verbdir/\string\archive/\string\verbarchive)
+     arguments}%
     {After \string\dir\detokenize{{name}{comment}} you must follow
      with \detokenize{`{...}'} (the children block). Blank lines
      between them are fine. Found a non-brace token instead ---
@@ -482,8 +491,30 @@
   \dte@store@entry@opts{#1}{\the\dte@cnt}%
 }
 
+%% ------------------------------------------------------------
+%%  \archive  (container entry whose name is rendered as-is)
+%%
+%%  Stores type t=2 and consumes a children block via \dte@kids,
+%%  so nested entries indent and connect under it the same way
+%%  any other container's contents do. Override
+%%  \DirtreexFormatName and dispatch on \DirtreexGetField{idx}{t}
+%%  to attach archive-specific icons or colours; the package
+%%  ships no built-in archive styling.
+\NewDocumentCommand{\archive}{O{} m m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\archive\space used outside dirtreex environment}%
+      {Every \string\archive\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{2}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@kids
+}
+
 %% ============================================================
-%%  \verbdir / \verbfile  (verbatim name variants)
+%%  \verbdir / \verbfile / \verbarchive  (verbatim name variants)
 %% ============================================================
 %% The name argument (#2) is read verbatim using xparse's `v'
 %% type. The opening delimiter is the first non-letter,
@@ -526,6 +557,19 @@
   \global\advance\dte@cnt by 1\relax
   \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{0}%
   \dte@store@entry@opts{#1}{\the\dte@cnt}%
+}
+
+\NewDocumentCommand{\verbarchive}{O{} v m}{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string\verbarchive\space used outside dirtreex environment}%
+      {Every \string\verbarchive\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{2}%
+  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@kids
 }
 
 %% ============================================================
@@ -648,8 +692,9 @@
 %%  \DirtreexFormatName's single-argument convention and the
 %%  \DirtreexGetField{#1}{n} / \DirtreexGetField{#1}{t} accessors
 %%  stable across minor versions. Only slot keys `n' (entry name)
-%%  and `t' (type flag: 1 for dirs, 0 for files) are guaranteed
-%%  stable; other slot keys exist internally but may change.
+%%  and `t' (type flag: 1 for dirs, 0 for files, 2 for archives)
+%%  are guaranteed stable; other slot keys exist internally but
+%%  may change.
 \newcommand{\DirtreexFormatName}[1]{%
   \dte@eget{#1}{n}%
   \ifnum\dte@eget{#1}{t}=1 /\fi
@@ -741,9 +786,68 @@
   \ifx#2\relax  \edef#2{\the\dte@rulewidth}\fi
   \ifx#2\@empty \edef#2{\the\dte@rulewidth}\fi
 }
+%% Resolve the per-entry line-style override for entry #1 into the
+%% local control sequence #2. Falls back to the env-level
+%% \dte@linestyle (default `solid') on undefined / \relax / empty
+%% slots. The resolved token is passed verbatim to TikZ's \draw[...]
+%% options in the non-solid connector path, so any TikZ line-style
+%% key (`dashed', `dotted', `densely dashed', a `dash pattern=...'
+%% list, ...) works without further translation.
+\def\dte@resolve@ls#1#2{%
+  \expandafter\let\expandafter#2\csname dte@e#1ls\endcsname
+  \ifx#2\relax  \let#2\dte@linestyle \fi
+  \ifx#2\@empty \let#2\dte@linestyle \fi
+}
 \def\dte@resolve@style#1{%
   \dte@resolve@lc{#1}\dte@cur@lc
   \dte@resolve@lw{#1}\dte@cur@lw
+  \dte@resolve@ls{#1}\dte@cur@ls
+}
+
+%% --------------------------------------------------------------
+%%  \dte@drawvert{raise}{height}{depth}{color}{width}{style}
+%%
+%%  Draws a single vertical line of the requested height (above
+%%  baseline) and depth (below baseline), raised by `raise', in
+%%  the requested colour/width. The stroke is centred on the
+%%  cursor's x; total horizontal advance is zero (callers control
+%%  column positioning with an outer \kern).
+%%
+%%  Two render paths chosen by `style':
+%%    solid (default) -> primitive \vrule (fast).
+%%    any other token -> TikZ \draw with `style' in the option
+%%      list, so dashed / dotted / dash-pattern / etc. all work.
+%%
+%%  Used by \dte@draw@passthrough's three rendering sites
+%%  (own-depth upper half, own-depth lower half, pure pass-
+%%  through), so every column whose style is owned by an entry
+%%  honours that entry's `line style'. The TikZ branch uses
+%%  \edef + \the\dimexpr to pin each parameter to a `Xpt' literal
+%%  before TikZ parses it (TikZ's coordinate parser doesn't accept
+%%  raw \dimexpr...\relax expressions).
+\def\dte@drawvert#1#2#3#4#5#6{%
+  \ifx#6\dte@ls@solid
+    \raise#1\hbox{%
+      {\color{#4}%
+       \dte@rulewidth=#5\relax
+       \kern-0.5\dte@rulewidth
+       \vrule width\dte@rulewidth height#2 depth #3\relax
+       \kern-0.5\dte@rulewidth
+      }%
+    }%
+  \else
+    \begingroup
+      \edef\dte@dv@H{\the\dimexpr#2\relax}%
+      \edef\dte@dv@D{\the\dimexpr#3\relax}%
+      \raise#1\hbox{%
+        \tikz[baseline=0pt]{%
+          \useasboundingbox (0pt,-\dte@dv@D) rectangle (0pt,\dte@dv@H);%
+          \draw[#4,line width=#5,line cap=butt,#6]
+            (0pt,-\dte@dv@D) -- (0pt,\dte@dv@H);%
+        }%
+      }%
+    \endgroup
+  \fi
 }
 
 %% ------------------------------------------------------------
@@ -787,23 +891,54 @@
 %% Sharp connector: the vertical extends down to meet the
 %% horizontal's bottom edge, and the horizontal starts at the
 %% vertical's right edge, producing a seamless `└` at any width.
+%%
+%% Two render paths chosen by \dte@cur@ls:
+%%   * solid (default) -> two \vrule calls (fast primitive path).
+%%   * any other token -> TikZ \draw with that token in the option
+%%     list, so the full TikZ line-style vocabulary works
+%%     (`dashed', `dotted', `densely dashed', a `dash pattern=...'
+%%     list, etc.) without further translation here.
+%% The coordinate system in the TikZ branch mirrors
+%% \dte@connector@rounded: x=1pt,y=1pt, origin at the elbow
+%% corner, vertical extends up by \dte@connV, horizontal extends
+%% right by \dte@width. line cap=butt keeps every dash a flat
+%% rectangle so the geometry matches the \vrule version pixel-for-
+%% pixel along the solid axis.
 \def\dte@connector@sharp{%
-  {\color{\dte@cur@lc}%
-   \dte@rulewidth=\dte@cur@lw\relax
-   \raise\dte@connR\hbox to 0pt{%
-     \kern-0.5\dte@rulewidth
-     \vrule width\dte@rulewidth
-            height\dte@connV
-            depth 0.5\dte@rulewidth\relax
-     \hss
-   }%
-   \raise\dte@connR\hbox{%
-     \kern 0.5\dte@rulewidth
-     \vrule width\dimexpr\dte@width-0.5\dte@rulewidth\relax
-            height 0.5\dte@rulewidth
-            depth  0.5\dte@rulewidth
-   }%
-  }%
+  \ifx\dte@cur@ls\dte@ls@solid
+    {\color{\dte@cur@lc}%
+     \dte@rulewidth=\dte@cur@lw\relax
+     \raise\dte@connR\hbox to 0pt{%
+       \kern-0.5\dte@rulewidth
+       \vrule width\dte@rulewidth
+              height\dte@connV
+              depth 0.5\dte@rulewidth\relax
+       \hss
+     }%
+     \raise\dte@connR\hbox{%
+       \kern 0.5\dte@rulewidth
+       \vrule width\dimexpr\dte@width-0.5\dte@rulewidth\relax
+              height 0.5\dte@rulewidth
+              depth  0.5\dte@rulewidth
+     }%
+    }%
+  \else
+    \raise\dte@connR\hbox{%
+      \tikz[x=1pt,y=1pt,baseline=0pt]{%
+        \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
+        % Vertical stem and horizontal arm drawn as TWO separate
+        % paths, both starting at the corner (0,0), so each begins
+        % its dash cycle fresh. This keeps the dash pattern aligned
+        % between the stem and the arm: the corner is always at the
+        % start of an "on" segment in both directions, and dash
+        % lengths along the stem match dash lengths along the arm.
+        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,\dte@cur@ls]
+          (0,0) -- (0,\strip@pt\dte@connV);%
+        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,\dte@cur@ls]
+          (0,0) -- (\strip@pt\dte@width,0);%
+      }%
+    }%
+  \fi
 }
 
 %% ------------------------------------------------------------
@@ -840,7 +975,7 @@
   \raise\dte@connR\hbox{%
     \tikz[x=1pt,y=1pt,baseline=0pt]{%
       \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
-      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round]
+      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,\dte@cur@ls]
         (0,\strip@pt\dte@connV) -- (0,\strip@pt\dte@connE)
         arc[start angle=180,end angle=270,radius=\strip@pt\dte@connE]
         -- (\strip@pt\dte@width,0);%
@@ -927,15 +1062,17 @@
     \let\dte@pt@src\dte@nextidx
     \dte@resolve@lc{\dte@pt@src}\dte@pt@lc
     \dte@resolve@lw{\dte@pt@src}\dte@pt@lw
+    \dte@resolve@ls{\dte@pt@src}\dte@pt@ls
     \ifnum\dte@k=\dte@ownd\relax
       % Own-depth column. Split the column at arc-top
       % (baseline + 0.2 bls + connE):
       %   upper half -> row-top down to arc-top, in entry's
-      %                 own colour;
+      %                 own colour / style;
       %   lower half -> arc-top down through the row, in the
-      %                 next sibling's colour.
+      %                 next sibling's colour / style.
       \dte@resolve@lc{#1}\dte@pt@own@lc
       \dte@resolve@lw{#1}\dte@pt@own@lw
+      \dte@resolve@ls{#1}\dte@pt@own@ls
       % Upper half: from row top down to arc-top.
       %   raise = 0.2 bls + connE,  h = 0.5 bls - connE,  d = 0pt.
       \dte@ptRaise=0.2\baselineskip
@@ -945,16 +1082,8 @@
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
-          \raise\dte@ptRaise\hbox{%
-            {\color{\dte@pt@own@lc}%
-             \dte@rulewidth=\dte@pt@own@lw\relax
-             \kern-0.5\dte@rulewidth
-             \vrule width\dte@rulewidth
-                    height\dte@ptH
-                    depth  0pt\relax
-             \kern-0.5\dte@rulewidth
-            }%
-          }%
+          \dte@drawvert{\dte@ptRaise}{\dte@ptH}{0pt}%
+            {\dte@pt@own@lc}{\dte@pt@own@lw}{\dte@pt@own@ls}%
           \hss
         }%
         \hss
@@ -966,32 +1095,20 @@
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
-          {\color{\dte@pt@lc}%
-           \dte@rulewidth=\dte@pt@lw\relax
-           \kern-0.5\dte@rulewidth
-           \vrule width\dte@rulewidth
-                  height\dte@ptH
-                  depth  0.3\baselineskip\relax
-           \kern-0.5\dte@rulewidth
-          }%
+          \dte@drawvert{0pt}{\dte@ptH}{0.3\baselineskip}%
+            {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
           \hss
         }%
         \hss
       }%
     \else
       % Pure pass-through column: no elbow at this depth in this
-      % row, draw the full-row vrule in the next sibling's style.
+      % row, draw the full-row trunk in the next sibling's style.
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
-          {\color{\dte@pt@lc}%
-           \dte@rulewidth=\dte@pt@lw\relax
-           \kern-0.5\dte@rulewidth
-           \vrule width\dte@rulewidth
-                  height 0.7\baselineskip
-                  depth  0.3\baselineskip\relax
-           \kern-0.5\dte@rulewidth
-          }%
+          \dte@drawvert{0pt}{0.7\baselineskip}{0.3\baselineskip}%
+            {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
           \hss
         }%
         \hss
@@ -1249,7 +1366,8 @@
         cross-page-stub variant as a graceful fallback.\MessageBreak
         Check that the env body starts with a depth-0
         \string\dir\space or \string\file\space (or
-        \string\verbdir/\string\verbfile)
+        \string\verbdir/\string\verbfile/\string\archive/%
+        \string\verbarchive)
       }%
     \fi
     \dte@k=#1\relax
@@ -1666,7 +1784,8 @@
           \let\dte@ext@src\dte@nextidx
           \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
-          \draw[\dte@ext@lc,line width=\dte@ext@lw]
+          \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
+          \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
             ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
             ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
         }%
@@ -1684,7 +1803,8 @@
             \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
             \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
-            \draw[\dte@ext@lc,line width=\dte@ext@lw]
+            \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
+            \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
               ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
               ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
           \fi
@@ -1727,7 +1847,8 @@
           \let\dte@ext@src\dte@nextidx
           \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
-          \draw[\dte@ext@lc,line width=\dte@ext@lw]
+          \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
+          \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
             ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
             ([xshift=\dte@tempdim,yshift=0pt]C.south west);
         }%
@@ -1749,7 +1870,8 @@
             \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
             \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
-            \draw[\dte@ext@lc,line width=\dte@ext@lw]
+            \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
+            \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
               ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
               ([xshift=\dte@tempdim,yshift=0pt]C.south west);
           \fi

@@ -4,7 +4,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 
 ## Features
 
-- **Auto-tracked depth.** Nest `\dir` and `\file` as deeply as you want; the package derives the depth from the nesting — no per-entry depth argument.
+- **Auto-tracked depth.** Nest `\dir`, `\file`, and `\archive` as deeply as you want; the package derives the depth from the nesting — no per-entry depth argument.
 - **Sharp or rounded elbows**, configurable per tree or per entry via a single `elbow radius` key (`0pt` = sharp, any positive length = rounded arc).
 - **Per-entry overrides** for line colour, line width, and elbow radius.
 - **Breakable frame.** The border, background fill, and every pending `│` column continue seamlessly across page boundaries.
@@ -18,8 +18,8 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 1. [Requirements](#1-requirements)
 2. [Installation](#2-installation)
 3. [Quick start](#3-quick-start)
-4. [Entries: `\dir` and `\file`](#4-entries-dir-and-file)
-5. [Verbatim names: `\verbdir` and `\verbfile`](#5-verbatim-names-verbdir-and-verbfile)
+4. [Entries: `\dir`, `\file`, and `\archive`](#4-entries-dir-file-and-archive)
+5. [Verbatim names: `\verbdir`, `\verbfile`, and `\verbarchive`](#5-verbatim-names-verbdir-verbfile-and-verbarchive)
 6. [Environment options](#6-environment-options)
    - 6.1 [Top-level keys](#61-top-level-keys)
    - 6.2 [The `box` family](#62-the-box-family)
@@ -46,7 +46,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 | `xcolor` | Both `color!mix!color` and `HTML` colour models are accepted. |
 | `pgfkeys` | Option parsing. |
 | `zref-abspage` | Cross-page anchoring. |
-| `xparse` (auto-loaded by LaTeX2e) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile`. |
+| `xparse` (auto-loaded by LaTeX2e) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile` / `\verbarchive`. |
 
 No `-shell-escape`, no external tools, no Python helper.
 
@@ -88,17 +88,20 @@ This produces a framed tree where each line is `<name> … <comment>` joined wit
 
 ---
 
-## 4. Entries: `\dir` and `\file`
+## 4. Entries: `\dir`, `\file`, and `\archive`
 
 ```latex
-\dir[<entry options>]{<name>}{<comment>}{<children>}
-\file[<entry options>]{<name>}{<comment>}
+\dir    [<entry options>]{<name>}{<comment>}{<children>}
+\file   [<entry options>]{<name>}{<comment>}
+\archive[<entry options>]{<name>}{<comment>}{<children>}
 ```
 
-- **`<name>`** is typeset in `\ttfamily`. For `\dir`, a trailing `/` is appended automatically — write `src`, not `src/`.
+- **`<name>`** is typeset in `\ttfamily`. For `\dir`, a trailing `/` is appended automatically — write `src`, not `src/`. `\file` and `\archive` render the name as-is.
 - **`<comment>`** is typeset in `\rmfamily` and joined to `<name>` with a dot leader. Pass `{}` for no comment (the dot leader also disappears).
-- **`<children>`** is a run of further `\dir` / `\file` calls. You do **not** supply the depth — the package tracks it from the nesting.
+- **`<children>`** is a run of further `\dir` / `\file` / `\archive` calls. `\file` has no children block. You do **not** supply the depth — the package tracks it from the nesting.
 - **`<entry options>`** are optional and described in §6.4.
+
+`\archive` is a container entry: it accepts a children block, so its contents indent and connect inside the tree, and its name is rendered as-is (no path separator appended). Use it for archive-like containers (`.tar.gz`, `.zip`, `.jar`, …) or for any container whose name should not carry a trailing `/`. To attach archive-specific icons or colours, override `\DirtreexFormatName` (§4.4) and dispatch on the entry's `t` slot.
 
 ### 4.1 Multi-line comments
 
@@ -130,8 +133,8 @@ Simply place several `dirtreex` environments back-to-back. Each environment has 
 
 Override it with `\renewcommand` to inject icons, prefixes, or styling. The hook receives the 1-based entry index as `#1`, and `\DirtreexGetField{idx}{slot}` reads any stored field for that index:
 
-- `\DirtreexGetField{#1}{n}` — the entry name (the second mandatory argument of `\dir` / `\file`).
-- `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files.
+- `\DirtreexGetField{#1}{n}` — the entry name (the second mandatory argument of `\dir` / `\file` / `\archive`).
+- `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files, `2` for archives.
 
 **Example — tag every directory with a `[DIR]` prefix:**
 
@@ -143,22 +146,41 @@ Override it with `\renewcommand` to inject icons, prefixes, or styling. The hook
 }
 ```
 
+**Example — three-way icon dispatch on `t`:**
+
+```latex
+\renewcommand{\DirtreexFormatName}[1]{%
+  \ifcase\DirtreexGetField{#1}{t}%
+    [F]\space\DirtreexGetField{#1}{n}%             % t=0 file
+  \or
+    [D]\space\DirtreexGetField{#1}{n}/%            % t=1 directory
+  \or
+    [A]\space\DirtreexGetField{#1}{n}%             % t=2 archive
+  \fi
+}
+```
+
+Swap the bracketed tags for icons from your icon package of choice (`\faFolder`, `\faFile`, `\faFileArchive`, …) to get the same dispatch with glyphs.
+
 **Constraints.** The replacement runs inside the row's name vbox under the body's font. It must respect the row's `\hsize` and leave the caller's `\strut` intact; anything that adds vertical material (for example a `\parbox` with its own depth) will pull the entry's connector out of alignment.
 
-**Stability.** `\DirtreexFormatName`'s single-argument convention and the `\DirtreexGetField{#1}{n}` / `\DirtreexGetField{#1}{t}` accessors are committed public surfaces — overrides built around them keep compiling across minor versions. Only slot keys `n` (entry name) and `t` (type flag: `1` for directories, `0` for files) are guaranteed stable; other slot keys exist internally but are not part of the public surface and may change.
+**Stability.** `\DirtreexFormatName`'s single-argument convention and the `\DirtreexGetField{#1}{n}` / `\DirtreexGetField{#1}{t}` accessors are committed public surfaces — overrides built around them keep compiling across minor versions. Only slot keys `n` (entry name) and `t` (type flag: `1` for directories, `0` for files, `2` for archives) are guaranteed stable; other slot keys exist internally but are not part of the public surface and may change.
 
 ---
 
-## 5. Verbatim names: `\verbdir` and `\verbfile`
+## 5. Verbatim names: `\verbdir`, `\verbfile`, and `\verbarchive`
 
-`\dir` and `\file` accept LaTeX-tokenised name arguments — paths containing `_`, `$`, `&`, `#`, `^`, `~`, `%`, or `\` need to be escaped (`\_`, `\$`, etc.) or wrapped in `\detokenize{}`. For paths where this is inconvenient, `dirtreex` provides two verbatim variants:
+`\dir`, `\file`, and `\archive` accept LaTeX-tokenised name arguments — paths containing `_`, `$`, `&`, `#`, `^`, `~`, `%`, or `\` need to be escaped (`\_`, `\$`, etc.) or wrapped in `\detokenize{}`. For paths where this is inconvenient, `dirtreex` provides three verbatim variants:
 
 ```latex
-\verbdir[<entry options>]|<path>|{<comment>}{<children>}
-\verbfile[<entry options>]|<path>|{<comment>}
+\verbdir    [<entry options>]|<path>|{<comment>}{<children>}
+\verbfile   [<entry options>]|<path>|{<comment>}
+\verbarchive[<entry options>]|<path>|{<comment>}{<children>}
 ```
 
-The path is read with xparse's `v` (verbatim) specifier: the first non-letter, non-space character after the macro name is the opening delimiter, the matching delimiter closes the path, and every byte in between is captured at catcode 12 ("other"). Comment and children retain full LaTeX catcodes — you can still write `$x^2$`, `\textbf{...}`, `\\` inside the comment, and nested `\dir` / `\file` / `\verbdir` / `\verbfile` inside the children block work normally.
+Each verbatim variant pairs with the same-shape regular command: `\verbdir` mirrors `\dir` (children block, trailing `/`), `\verbfile` mirrors `\file` (no children), and `\verbarchive` mirrors `\archive` (children block, no trailing `/`).
+
+The path is read with xparse's `v` (verbatim) specifier: the first non-letter, non-space character after the macro name is the opening delimiter, the matching delimiter closes the path, and every byte in between is captured at catcode 12 ("other"). Comment and children retain full LaTeX catcodes — you can still write `$x^2$`, `\textbf{...}`, `\\` inside the comment, and nested `\dir` / `\file` / `\archive` / `\verbdir` / `\verbfile` / `\verbarchive` inside the children block work normally.
 
 ### 5.1 Example
 
@@ -208,6 +230,7 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | `fontsize` | `\small` | Size command applied to the tree body. Use any length-free size macro: `\tiny`, `\small`, `\normalsize`, …, `\Large`. |
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
 | `line width` | `0.4pt` | Default rule width for all connectors. |
+| `line style` | `solid` | Dash pattern for every connector segment styled by this entry. Accepts any TikZ line-style token — `solid`, `dashed`, `dotted`, `densely dashed`, `loosely dashed`, `densely dotted`, `loosely dotted`, `dash dot`, `dash dot dot`, … — or a full `dash pattern=on Xpt off Ypt` list. `solid` keeps the primitive `\vrule` fast path; any other value routes that segment through TikZ. Propagates to the entry's own elbow, the upper-half of its own-depth pass-through column, and (for the next sibling at each active depth) the lower-half pass-through and full pure-pass-through trunks, plus the matching cross-page extension rules. |
 | `elbow radius` | `0pt` | Elbow geometry. `0pt` (the default) gives sharp `└`/`├` right angles; any positive length gives rounded arcs of that radius. Clamped against `0.5\baselineskip` and against `line width` for legibility. |
 | `box` | see §6.2 | Frame settings. |
 | `pagebreak` | see §6.3 | Page-break settings. |
@@ -247,12 +270,16 @@ Example:
 
 ### 6.4 Per-entry overrides
 
-Any `\dir` or `\file` can take the same `line color`, `line width`, and `elbow radius` keys. They override the environment-level defaults **for that entry's connector only**:
+Any `\dir`, `\file`, `\archive` (or their verbatim siblings `\verbdir` / `\verbfile` / `\verbarchive`) can take the same `line color`, `line width`, `line style`, and `elbow radius` keys. They override the environment-level defaults **for that entry's connector only**:
 
 ```latex
 \dir[line color = blue]{src}{source}{
   \file[line color = red, line width = 1.5pt]{old.py}{deprecated}
   \file[line color = green!60!black, elbow radius = 0pt]{new.py}{sharp}
+  \archive{vendor.zip}{bundled}{
+    \file[line style = dashed]{numpy.py}{}
+    \file[line style = dashed]{pandas.py}{}
+  }
 }
 ```
 
@@ -405,9 +432,9 @@ If you have not changed anything that moves a break point, a single pass is enou
 | First entry on a continuation page has no `│` above its elbow | Only one compile pass has run so far | Run LaTeX again. The `Rerun LaTeX...` warning at `\end{document}` is already asking you to. |
 | Vertical columns stop halfway down the last piece | Same cause — `zref` has not seen the break yet | Run LaTeX again. |
 | CJK characters render as `□` or are missing | Wrong engine | Compile with LuaLaTeX (plus `ctex`). |
-| `! Package dirtreex Error: \dir used outside dirtreex environment` (same for `\file`) | A stray `\dir` or `\file` that is not inside `\begin{dirtreex}…\end{dirtreex}` | Wrap the call in a `dirtreex` environment. |
+| `! Package dirtreex Error: \dir used outside dirtreex environment` (same for `\file`, `\archive`, and their verbatim siblings) | A stray entry command that is not inside `\begin{dirtreex}…\end{dirtreex}` | Wrap the call in a `dirtreex` environment. |
 | `! Package dirtreex Error: parsefour expects 1 or 4 comma-separated values` (or `parsetwo expects 1 or 2 …`) | `corners`, `margin`, `box break at`, or `tree break at` given with the wrong arity | Pass either a single value or the full set (four for `corners`/`margin`, two for the break-at keys). Remember the enclosing braces: `margin = {2pt, 4pt, 6pt, 8pt}`, not `margin = 2pt, 4pt, 6pt, 8pt`. |
-| `Package dirtreex Warning: \dte@findanchor hit the recursion floor at entry N` (once per env) | The tree's first top-level entry has depth > 0, or an outer `\begingroup` shadowed `\dte@depth` and produced an inverted depth sequence | Ensure the env body starts with a depth-0 `\dir` / `\file` (or `\verbdir` / `\verbfile`). The connector for the affected entry is snapped to a cross-page-stub variant as a graceful fallback, so the build still succeeds — the warning is purely diagnostic. |
+| `Package dirtreex Warning: \dte@findanchor hit the recursion floor at entry N` (once per env) | The tree's first top-level entry has depth > 0, or an outer `\begingroup` shadowed `\dte@depth` and produced an inverted depth sequence | Ensure the env body starts with a depth-0 `\dir` / `\file` / `\archive` (or `\verbdir` / `\verbfile` / `\verbarchive`). The connector for the affected entry is snapped to a cross-page-stub variant as a graceful fallback, so the build still succeeds — the warning is purely diagnostic. |
 
 ---
 
