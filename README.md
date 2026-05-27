@@ -128,28 +128,24 @@ Simply place several `dirtreex` environments back-to-back. Each environment has 
 
 `\DirtreexFormatName` is a public hook that controls how each entry name is typeset. The default expansion is just the stored name plus a trailing `/` for directories — exactly what every example above produces.
 
-Override it with `\renewcommand` to inject icons, prefixes, or styling. The hook receives the 1-based entry index as `#1`; two stable accessors read the fields you usually need:
+Override it with `\renewcommand` to inject icons, prefixes, or styling. The hook receives the 1-based entry index as `#1`, and `\DirtreexGetField{idx}{slot}` reads any stored field for that index:
 
-- `\dte@eget{#1}{n}` — the entry name (the second mandatory argument of `\dir` / `\file`).
-- `\dte@eget{#1}{t}` — `1` for directories, `0` for files.
-
-Because both identifiers contain `@`, the override has to sit between `\makeatletter` / `\makeatother` (or live inside another package).
+- `\DirtreexGetField{#1}{n}` — the entry name (the second mandatory argument of `\dir` / `\file`).
+- `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files.
 
 **Example — tag every directory with a `[DIR]` prefix:**
 
 ```latex
-\makeatletter
 \renewcommand{\DirtreexFormatName}[1]{%
-  \ifnum\dte@eget{#1}{t}=1 [DIR]\fi
-  \dte@eget{#1}{n}%
-  \ifnum\dte@eget{#1}{t}=1 /\fi
+  \ifnum\DirtreexGetField{#1}{t}=1 [DIR]\fi
+  \DirtreexGetField{#1}{n}%
+  \ifnum\DirtreexGetField{#1}{t}=1 /\fi
 }
-\makeatother
 ```
 
 **Constraints.** The replacement runs inside the row's name vbox under the body's font. It must respect the row's `\hsize` and leave the caller's `\strut` intact; anything that adds vertical material (for example a `\parbox` with its own depth) will pull the entry's connector out of alignment.
 
-**Stability.** `\DirtreexFormatName`'s argument convention (a single 1-based index) and the two accessors `\dte@eget{#1}{n}` / `\dte@eget{#1}{t}` are committed public surfaces — overrides built around them keep compiling across minor versions. Other internal slot names exist but are not part of the public surface and may change.
+**Stability.** `\DirtreexFormatName`'s single-argument convention and the `\DirtreexGetField{#1}{n}` / `\DirtreexGetField{#1}{t}` accessors are committed public surfaces — overrides built around them keep compiling across minor versions. Only slot keys `n` (entry name) and `t` (type flag: `1` for directories, `0` for files) are guaranteed stable; other slot keys exist internally but are not part of the public surface and may change.
 
 ---
 
@@ -411,6 +407,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 | CJK characters render as `□` or are missing | Wrong engine | Compile with LuaLaTeX (plus `ctex`). |
 | `! Package dirtreex Error: \dir used outside dirtreex environment` (same for `\file`) | A stray `\dir` or `\file` that is not inside `\begin{dirtreex}…\end{dirtreex}` | Wrap the call in a `dirtreex` environment. |
 | `! Package dirtreex Error: parsefour expects 1 or 4 comma-separated values` (or `parsetwo expects 1 or 2 …`) | `corners`, `margin`, `box break at`, or `tree break at` given with the wrong arity | Pass either a single value or the full set (four for `corners`/`margin`, two for the break-at keys). Remember the enclosing braces: `margin = {2pt, 4pt, 6pt, 8pt}`, not `margin = 2pt, 4pt, 6pt, 8pt`. |
+| `Package dirtreex Warning: \dte@findanchor hit the recursion floor at entry N` (once per env) | The tree's first top-level entry has depth > 0, or an outer `\begingroup` shadowed `\dte@depth` and produced an inverted depth sequence | Ensure the env body starts with a depth-0 `\dir` / `\file` (or `\verbdir` / `\verbfile`). The connector for the affected entry is snapped to a cross-page-stub variant as a graceful fallback, so the build still succeeds — the warning is purely diagnostic. |
 
 ---
 

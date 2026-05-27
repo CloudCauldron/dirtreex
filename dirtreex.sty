@@ -43,10 +43,24 @@
 %% a single "Rerun LaTeX..." \PackageWarningNoLine so that latexmk
 %% and rerunfilecheck know to schedule another pass.
 \newif\ifdte@needrerun
+%% Raised the first time \dte@findanchor's recursion-floor branch
+%% fires within an env (depth sequence malformed -- see the floor
+%% guard inside \dte@findanchor below). Suppresses subsequent
+%% warnings within the same env so the per-render
+%% `dte@findanchor hit the recursion floor' \PackageWarning fires
+%% at most once per environment. Reset to false by
+%% \dte@flush@state at env open. \newif's setters use a bare \let
+%% (plain.tex L264-269), so the package convention of
+%% \global\dte@floorwarnedtrue / \global\dte@floorwarnedfalse must
+%% be used at every assignment site -- otherwise the assignment
+%% rolls back at the env's outer \endgroup and the flag silently
+%% leaks across env boundaries. Matches \global\dte@needreruntrue
+%% above.
+\newif\ifdte@floorwarned
 %% Raised by the `tree break at' pgfkeys handler so
-%% \dte@enforce@boxfalse@breakat can distinguish a user-supplied
+%% \dte@breakat@phase{post} can distinguish a user-supplied
 %% override (which must survive `box=false') from the package-default
-%% 1em that \dte@apply@breakat@defaults stamps on every env entry.
+%% 1em that \dte@breakat@phase{pre} stamps on every env entry.
 %% Without this flag a user writing `[box=false]' would silently
 %% inherit `tree break at = 1em' (the box=true default) because the
 %% defaults macro runs before pgfkeys flips the showbox flag, leaving
@@ -122,7 +136,7 @@
 %%   bbB = second-piece top offset below the break line.
 %%   tbA / tbB play the same role for tree-extension vrules.
 %% Defaults are applied per environment by
-%% \dte@apply@breakat@defaults (see environment open).
+%% \dte@breakat@phase{pre} (see environment open).
 
 \def\dte@linecolor{black}
 
@@ -135,6 +149,17 @@
 %% distributed in order. Any other arity (2, 3, >=5) raises a
 %% \PackageError so malformed user input is reported instead of
 %% silently corrupting the layout.
+%%
+%% RECOVERY CONTRACT. On error the four outputs are \def-bound to the
+%% string `0pt' (not a <dimen> register value). All current consumers
+%% either render the result through TikZ (which accepts the string
+%% form ending in `pt') or coerce via \edef...\dimexpr, which also
+%% accepts the string. If a future caller wires \dte@parsefour into
+%% a pgfkeys `.store in' slot that is read DIRECTLY by \setlength
+%% (no \dimexpr coercion), the literal `0pt' token will land where a
+%% <dimen> is expected and TeX will trip `Missing number'. Either
+%% \dimexpr-coerce at the consumer side or change this macro to bind
+%% a real <dimen> on the error path.
 \def\dte@pf@sentinel{\dte@pf@SENTINEL}%
 \def\dte@parsefour#1#2#3#4#5{%
   \dte@pf@do#1,\dte@pf@sentinel,\dte@pf@sentinel,\dte@pf@sentinel,%
@@ -167,6 +192,12 @@
 %% A single value is broadcast to both outputs; two values are
 %% distributed in order. Any other arity (3, >=4) raises a
 %% \PackageError.
+%%
+%% RECOVERY CONTRACT. Same caveat as \dte@parsefour above: on error
+%% the outputs are \def-bound to the string `0pt'. Today's call sites
+%% (`box break at', `tree break at') \edef...\dimexpr-coerce, so the
+%% string works transparently. Verify the same coercion at any new
+%% call site before relying on the recovery output as a <dimen>.
 \def\dte@pt@sentinel{\dte@pt@SENTINEL}%
 \def\dte@parsetwo#1#2#3{%
   \dte@pt@do#1,\dte@pt@sentinel,\dte@pt@sentinel\dte@pt@end{#2}{#3}%
@@ -234,10 +265,14 @@
   %% \dte@draw@connector reads the resolved dimen directly.
   elbow radius/.code={\dte@elbowR=#1\relax},
   %% --- per-entry style overrides (consumed by \dir[...] / \file[...]) ---
+  %% The three handlers below write to LOCAL temps; \dte@store@entry@opts
+  %% wraps its call to \pgfkeys in \begingroup/\endgroup so the temps
+  %% never escape to global scope. Do NOT change these to \gdef without
+  %% also removing the surrounding group at the consumer site.
   /dte/entry/.cd,
-  line color/.code={\gdef\dte@tmp@entry@lc{#1}},
-  line width/.code={\gdef\dte@tmp@entry@lw{#1}},
-  elbow radius/.code={\gdef\dte@tmp@entry@er{#1}},
+  line color/.code={\def\dte@tmp@entry@lc{#1}},
+  line width/.code={\def\dte@tmp@entry@lw{#1}},
+  elbow radius/.code={\def\dte@tmp@entry@er{#1}},
 }
 
 %% ============================================================
@@ -282,6 +317,7 @@
       \advance\dte@i by 1\relax
     \repeat
   \fi
+  \global\dte@floorwarnedfalse
 }
 
 %% ------------------------------------------------------------
@@ -337,15 +373,25 @@
 %%   #1 = option string, #2 = entry index.
 %% The three slots always exist after this call (possibly empty),
 %% which simplifies downstream retrieval.
+%%
+%% \dte@tmp@entry@{lc,lw,er} are LOCAL temporaries -- they live only
+%% between \begingroup and \endgroup here. The pgfkeys handlers
+%% under /dte/entry/.cd (above) also use \def (not \gdef) so the
+%% user-supplied value is written at the same group level. The three
+%% \xdef writes inside the group store the per-entry override
+%% globally; reading the local temps at \xdef time is fine because
+%% expansion happens before \endgroup fires.
 \def\dte@store@entry@opts#1#2{%
-  \gdef\dte@tmp@entry@lc{}\gdef\dte@tmp@entry@lw{}\gdef\dte@tmp@entry@er{}%
-  \def\dte@tmp@opts{#1}%
-  \ifx\dte@tmp@opts\@empty\else
-    \pgfkeys{/dte/entry/.cd,#1}%
-  \fi
-  \expandafter\xdef\csname dte@e#2lc\endcsname{\dte@tmp@entry@lc}%
-  \expandafter\xdef\csname dte@e#2lw\endcsname{\dte@tmp@entry@lw}%
-  \expandafter\xdef\csname dte@e#2er\endcsname{\dte@tmp@entry@er}%
+  \begingroup
+    \def\dte@tmp@entry@lc{}\def\dte@tmp@entry@lw{}\def\dte@tmp@entry@er{}%
+    \def\dte@tmp@opts{#1}%
+    \ifx\dte@tmp@opts\@empty\else
+      \pgfkeys{/dte/entry/.cd,#1}%
+    \fi
+    \expandafter\xdef\csname dte@e#2lc\endcsname{\dte@tmp@entry@lc}%
+    \expandafter\xdef\csname dte@e#2lw\endcsname{\dte@tmp@entry@lw}%
+    \expandafter\xdef\csname dte@e#2er\endcsname{\dte@tmp@entry@er}%
+  \endgroup
 }
 
 %% ============================================================
@@ -594,20 +640,21 @@
 %%  caller; otherwise vertical alignment between the name and
 %%  its connector will drift.
 %%
-%%  This is a SEMVER-STABLE PUBLIC SURFACE. The package is
-%%  committed to:
-%%    - keeping \DirtreexFormatName's argument convention
-%%      (single 1-based index) across minor versions;
-%%    - keeping \dte@eget{#1}{n} and \dte@eget{#1}{t} stable
-%%      enough that a user override built around them keeps
-%%      compiling.
-%%  Internal slot names beyond `n' / `t' are NOT part of the
-%%  public surface; users overriding this hook should rely only
-%%  on `n' and `t' if they want forward compatibility.
+%%  Inside the override, \DirtreexGetField{idx}{slot} reads a
+%%  stored slot. Argument order is (idx, slot); idx first
+%%  matches \DirtreexFormatName's #1.
+%%
+%%  SEMVER-STABLE PUBLIC SURFACE. The package commits to keeping
+%%  \DirtreexFormatName's single-argument convention and the
+%%  \DirtreexGetField{#1}{n} / \DirtreexGetField{#1}{t} accessors
+%%  stable across minor versions. Only slot keys `n' (entry name)
+%%  and `t' (type flag: 1 for dirs, 0 for files) are guaranteed
+%%  stable; other slot keys exist internally but may change.
 \newcommand{\DirtreexFormatName}[1]{%
   \dte@eget{#1}{n}%
   \ifnum\dte@eget{#1}{t}=1 /\fi
 }
+\newcommand{\DirtreexGetField}[2]{\dte@eget{#1}{#2}}
 %% Internal renamer. All package-internal call sites keep going
 %% through \dte@format@name so a user-side \renewcommand on
 %% \DirtreexFormatName is the single point of truth.
@@ -632,17 +679,16 @@
 %% The local redefinition expands \\ to \@normalcr (the standard
 %% LaTeX text-mode line break) followed by \null\hfill\ignorespaces.
 %% We invoke \@normalcr directly rather than \let-saving and
-%% replaying the call-site meaning of \\. The latter (replaying
-%% whatever \\ meant at the call site) broke inside tabular / array
-%% / eqnarray nesting: there the user's \\ is locally \@arraycr, and
-%% replaying \@arraycr from the comment's interior emitted
-%% `Misplaced \cr' because the alignment in scope was the
-%% surrounding tabular row, not the comment. Forcing \@normalcr
-%% here makes the line break a paragraph line break regardless of
-%% what the surrounding environment has done to \\. Known
-%% limitation: a user-written \\[length] form is not honoured (the
-%% [length] argument is consumed as text after the line break);
-%% this matches the pre-fix behaviour and is not a regression.
+%% replaying the call-site meaning of \\. Replaying whatever \\
+%% meant at the call site fails inside tabular / array / eqnarray
+%% nesting: there the user's \\ is locally \@arraycr, and replaying
+%% \@arraycr from the comment's interior emits `Misplaced \cr'
+%% because the alignment in scope is the surrounding tabular row,
+%% not the comment. Forcing \@normalcr here makes the line break a
+%% paragraph line break regardless of what the surrounding
+%% environment has done to \\. Known limitation: a user-written
+%% \\[length] form is not honoured (the [length] argument is
+%% consumed as text after the line break).
 %%
 %% We \let (not \edef) the stored slot into \dte@ctmp so the raw
 %% \\ token survives to emission time, where our local redefinition
@@ -652,7 +698,7 @@
 %% Subtlety: TeX's paragraph builder discards glue and penalties at
 %% the start of a line after a forced break. A bare \hfill right
 %% after \\ would therefore be dropped on the new line, leaving the
-%% continuation flush-LEFT as in the pre-fix rendering. We insert a
+%% continuation flush-LEFT instead of flush-right. We insert a
 %% zero-width \null (an empty hbox, non-discardable) before the
 %% \hfill so the stretch survives to push the content right.
 \def\dte@format@comment#1{%
@@ -781,6 +827,14 @@
   % The connV clamp stays inline (it is caller-specific); every
   % other invariant goes through \dte@clampelbow so the connector
   % and pass-through paths share one source of truth.
+  %
+  % UNIT-PINNING WARNING. The coordinates emitted below via
+  % \strip@pt\dte@connV / \dte@connE / \dte@width are BARE NUMBERS
+  % (no pt suffix). They are interpreted as pt only because the
+  % surrounding \tikz[x=1pt,y=1pt,...] (next line) pins the unit
+  % vectors to 1pt. If a future refactor changes either x= or y=
+  % away from 1pt, EVERY \strip@pt expansion in this macro must
+  % be re-scaled in lockstep or the rounded arc misaligns silently.
   \ifdim\dte@connE>\dte@connV \dte@connE=\dte@connV \fi
   \dte@clampelbow\dte@connE
   \raise\dte@connR\hbox{%
@@ -842,7 +896,7 @@
 %%  stub visible between arc-top and arm-level -- i.e. a small
 %%  coloured peg sitting inside the arc's concavity. For sharp
 %%  connectors connE is zero, so this reduces to "split at arm
-%%  level" and matches the historical behaviour exactly.
+%%  level" -- no special-case branch needed.
 \def\dte@draw@passthrough#1{%
   \edef\dte@save@tempdim{\the\dte@tempdim}%
   \edef\dte@actlist{\dte@safeget{dte@e#1a}}%
@@ -1177,6 +1231,27 @@
   %% raise `Missing number'. Snap to the cross-page-stub
   %% fallback instead.
   \ifnum\dte@k<2
+    %% Floor guard -- see the comment above. Snap to the
+    %% cross-page-stub fallback as graceful degradation, and emit a
+    %% one-shot \PackageWarning the FIRST time this branch is hit
+    %% per env so the user knows the tree is structurally invalid
+    %% rather than getting a mysteriously misplaced connector.
+    \ifdte@floorwarned\else
+      \global\dte@floorwarnedtrue
+      \PackageWarning{dirtreex}{%
+        \string\dte@findanchor\space hit the recursion floor at
+        entry #1.\MessageBreak
+        This usually means the first top-level entry has depth >0,
+        or an outer \string\begingroup\space shadowed
+        \string\dte@depth\space and produced an inverted depth
+        sequence.\MessageBreak
+        The connector for this entry has been snapped to the
+        cross-page-stub variant as a graceful fallback.\MessageBreak
+        Check that the env body starts with a depth-0
+        \string\dir\space or \string\file\space (or
+        \string\verbdir/\string\verbfile)
+      }%
+    \fi
     \dte@k=#1\relax
     \dte@splitflagtrue
   \else
@@ -1749,46 +1824,51 @@
 %% ============================================================
 %%  The dirtreex environment
 %% ============================================================
-%% Apply default break-at distances for the current environment.
-%% Called BEFORE \pgfkeys{...,#1}, so user-supplied values override
-%% these defaults. Reads \ifdte@showbox as it stands coming into
-%% the environment (the persistent package default is true, set at
-%% \dte@showboxtrue above); the pgfkeys pass that follows may flip
-%% the flag, which is handled by \dte@enforce@boxfalse@breakat.
-%% The defaults are pinned to ABSOLUTE LENGTHS at parse time via
-%% \edef + \dimexpr, evaluated under the surrounding-document font.
-%% This matters because the env body later switches to \dte@fontsize
-%% (\small by default) at line 1598 — a stored "1em" token would
-%% otherwise be re-interpreted under \small at use time, giving the
-%% user a smaller em than the README and the surrounding text imply.
-\def\dte@apply@breakat@defaults{%
+%% Apply or enforce the per-env break-at defaults. Phase-dispatched
+%% via \csname dte@breakat@phase@<arg>\endcsname:
+%%
+%%   {pre}  --- runs BEFORE \pgfkeys parses user options. Stamps
+%%              package defaults (box=true: tb*=1em; box=false:
+%%              tb*=0pt). bb* is zero in both phases (no use case
+%%              for non-zero bb* default today).
+%%
+%%   {post} --- runs AFTER \pgfkeys. Enforces "box=false ignores
+%%              user-supplied bb*" unconditionally, and "box=false
+%%              zeroes tb* unless the user set tree break at"
+%%              conditionally on \ifdte@tbset (set by the
+%%              `tree break at' pgfkeys handler).
+%%
+%% The four scratch macros (\dte@bbA, \dte@bbB, \dte@tbA, \dte@tbB)
+%% are pinned to ABSOLUTE LENGTHS at parse time via \edef + \dimexpr,
+%% evaluated under the surrounding-document font. This matters because
+%% the env body later switches to \dte@fontsize (\small by default) --
+%% a stored "1em" token would otherwise be re-interpreted under \small
+%% at use time, giving the user a smaller em than the README and the
+%% surrounding text imply.
+%%
+%% Two SEPARATE call sites in the env-open block bracket \pgfkeys;
+%% do not collapse them. The {pre} phase must run before pgfkeys so
+%% the user's options can override the package defaults; the {post}
+%% phase must run after pgfkeys so it can read the final
+%% \ifdte@showbox / \ifdte@tbset state.
+\def\dte@breakat@phase#1{%
+  \ifcsname dte@breakat@phase@#1\endcsname
+    \csname dte@breakat@phase@#1\endcsname
+  \else
+    \PackageError{dirtreex}%
+      {Unknown \string\dte@breakat@phase\space argument `#1'}%
+      {Expected `pre' or `post'.}%
+  \fi
+}
+\def\dte@breakat@phase@pre{%
+  \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
   \ifdte@showbox
-    \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
     \edef\dte@tbA{\the\dimexpr 1em\relax}\edef\dte@tbB{\the\dimexpr 1em\relax}%
   \else
-    %% box=false: box break at is ignored; force both to 0pt so
-    %% any internal math that still references them reads a
-    %% benign zero. tree break at defaults to 0pt (the tree is
-    %% bare, no visible frame to pull away from).
-    \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
     \edef\dte@tbA{\the\dimexpr 0pt\relax}\edef\dte@tbB{\the\dimexpr 0pt\relax}%
   \fi
 }
-%% Enforce the "box=false => box break at is ignored" rule AFTER
-%% pgfkeys has had a chance to parse user input. We zero
-%% \dte@bbA / \dte@bbB unconditionally when the frame is off, so
-%% any downstream math that still references them reads benign
-%% zeros. For \dte@tbA / \dte@tbB the rule is conditional: if the
-%% user supplied an explicit `tree break at' (\ifdte@tbset is true),
-%% their value survives; otherwise we ZERO tbA/tbB so the README's
-%% "tree break at defaults to 0pt when box=false" semantic actually
-%% holds. Without this gating the package-default 1em (stamped by
-%% \dte@apply@breakat@defaults before pgfkeys parsed `box=false')
-%% would silently leak through and produce a visible ~1em gap at
-%% the continuation page top and an offset bar bottom on the first
-%% piece. Pinned to absolute lengths via \edef + \dimexpr for the
-%% same reason as \dte@apply@breakat@defaults — see the note above.
-\def\dte@enforce@boxfalse@breakat{%
+\def\dte@breakat@phase@post{%
   \ifdte@showbox\else
     \edef\dte@bbA{\the\dimexpr 0pt\relax}\edef\dte@bbB{\the\dimexpr 0pt\relax}%
     \ifdte@tbset\else
@@ -1806,9 +1886,9 @@
   \global\dte@depth=0\relax
   %
   \dte@tbsetfalse
-  \dte@apply@breakat@defaults
+  \dte@breakat@phase{pre}%
   \pgfkeys{/dte/.cd,#1}%
-  \dte@enforce@boxfalse@breakat
+  \dte@breakat@phase{post}%
   %
   % Open the collection vbox in stream. The body executes
   % between this \bgroup and the \egroup in the end-code.
