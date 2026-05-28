@@ -452,6 +452,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 | :--- | :--- |
 | `dirtreex.sty` | The package — a single self-contained file. |
 | `dirtreex_examples.tex` | Worked examples covering the full feature surface. Compile with `lualatex dirtreex_examples.tex` (twice, for `zref` to settle) to see every option in action. |
+| `assets/` | PNG glyphs (`directory.png`, `python.png`, `zip_file.png`) used by the icon-dispatch demo in `dirtreex_examples.tex`. |
 | `README.md` | This documentation. |
 | `LICENSE` | The LaTeX Project Public License 1.3c. |
 
