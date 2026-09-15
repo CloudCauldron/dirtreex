@@ -2048,11 +2048,15 @@
   \ifnum\dte@cnt=0\relax
     \PackageWarning{dirtreex}{Empty dirtreex environment; nothing rendered.}%
   \else
+    % Finish the surrounding paragraph before tree font or glue changes.
+    \par
     \dte@preprocess
     \dte@compute@breakdata
     %
     \global\dte@piecenum=0\relax
     \dte@fontsize\relax
+    % Remove fixed end space after font hooks; retain alignment stretch/shrink.
+    \advance\parfillskip by-\dimexpr\parfillskip\relax\relax
     \dte@compute@stride
     %
     \setbox\dte@framebox=\vbox{%
