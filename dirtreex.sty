@@ -120,6 +120,10 @@
 \def\dte@fontsize{\small}
 \def\dte@textstyle{\ttfamily}
 \def\dte@commentstyle{\rmfamily}
+%% An empty selector inherits the current colour without reapplying
+%% xcolor blending or masking to it.
+\def\dte@dotfillcolor{}
+\def\dte@dotfillcommand{\dotfill}
 
 \def\dte@bordercolor{black}
 \def\dte@borderwidth{0.4pt}
@@ -229,6 +233,9 @@
 \pgfkeys{
   /dte/.cd,
   fontsize/.code={\def\dte@fontsize{#1}},
+  %% --- comment leaders ---
+  dotfill color/.code={\def\dte@dotfillcolor{\color{#1}}},
+  dotfill command/.store in=\dte@dotfillcommand,
   %% --- frame box ---
   box/.code={\pgfkeys{/dte/box/.cd,#1}},
   /dte/box/.cd,
@@ -706,18 +713,20 @@
 \def\dte@format@name#1{\DirtreexFormatName{#1}}
 %% Emit the comment half of an entry row. A single-line comment
 %% (or a comment short enough not to wrap) is emitted as
-%%   \dotfill <comment>
-%% so the dot leader fills the gap between the name's right edge
+%%   <dotfill command> <comment>
+%% so the leader fills the gap between the name's right edge
 %% and the comment's left edge; the comment then lands flush-right
-%% under the row's \hsize because \dotfill's \hfill (level-3
-%% stretch) dominates the default \parfillskip (level-2 stretch).
+%% under the row's \hsize because \hfill's fill-order stretch
+%% dominates the default \parfillskip's fil-order stretch.
+%% The default command is \dotfill; replacements must provide the
+%% same stretch. Colour and command declarations are grouped
+%% locally so they affect only the leader.
 %%
-%% A multi-line comment (one that contains \\ or wraps naturally)
-%% needs the same right-flush treatment on every physical line, not
-%% just the first. We achieve this by locally redefining \\ inside
+%% Explicit \\ breaks need the same right-flush treatment on each
+%% continuation line. We achieve this by locally redefining \\ inside
 %% the commentstyle group so that each forced break additionally
 %% emits an \hfill at the start of the next line. That \hfill is
-%% level-3 stretch and therefore dominates \parfillskip on the final
+%% fill-order stretch and therefore dominates \parfillskip on the final
 %% line too, so the whole comment block forms a ragged-LEFT rectangle
 %% flush against the row's right edge.
 %%
@@ -749,7 +758,8 @@
 \def\dte@format@comment#1{%
   \expandafter\let\expandafter\dte@ctmp\csname dte@e#1c\endcsname
   \ifx\dte@ctmp\@empty\else
-    \dotfill{\dte@commentstyle%
+    {\dte@dotfillcolor\dte@dotfillcommand}%
+    {\dte@commentstyle%
       \def\\{\@normalcr\null\hfill\ignorespaces}%
       \dte@ctmp\strut}%
   \fi

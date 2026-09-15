@@ -665,6 +665,112 @@ The package clamps the requested elbow radius against half the baseline skip (an
 \clearpage
 
 % ============================================================
+\section{Comment leaders}
+% ============================================================
+
+The \verb|dotfill color| and \verb|dotfill command| options customize the
+leader between each entry name and its comment. They apply to the current
+tree, including its root and nested entries. The defaults are the current
+text colour and \verb|\dotfill|.
+
+\subsection{Coloured dots}
+
+Only the leader takes the selected colour. Empty comments have no leader,
+and explicit \verb|\\| continuations keep their right alignment.
+
+\begin{Verbatim}
+\begin{dirtreex}[dotfill color=blue!60]
+  \dir{project}{root directory}{
+    \verbfile|main_app.py|{entry point}
+    \dir{docs}{documentation}{
+      \file{guide.txt}{first line\\second line}
+    }
+    \file{LICENSE}{}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[dotfill color=blue!60]
+  \dir{project}{root directory}{
+    \verbfile|main_app.py|{entry point}
+    \dir{docs}{documentation}{
+      \file{guide.txt}{first line\\second line}
+    }
+    \file{LICENSE}{}
+  }
+\end{dirtreex}
+
+\subsection{Solid leaders}
+
+Use the standard \LaTeX{} command \verb|\hrulefill| for a solid rule.
+The tree connectors can be styled independently.
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  dotfill color=teal, dotfill command=\hrulefill,
+  line color=gray]
+  \archive{release.zip}{distribution}{
+    \file{app.py}{application}
+    \file{README.md}{instructions}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  dotfill color=teal, dotfill command=\hrulefill,
+  line color=gray]
+  \archive{release.zip}{distribution}{
+    \file{app.py}{application}
+    \file{README.md}{instructions}
+  }
+\end{dirtreex}
+
+\clearpage
+
+\subsection{Custom dashed leaders}
+
+A custom command can repeat a small box with \verb|\cleaders| and stretch
+it with \verb|\hfill|. Here each \verb|0.8em| box contains a centred
+\verb|0.4em| dash. The final \verb|\kern0pt| follows the standard
+\LaTeX{} fill commands. Dimensions are evaluated in the tree's font.
+
+\begin{Verbatim}
+\begin{dirtreex}[
+  dotfill color=purple,
+  dotfill command={%
+    \cleaders\hbox to 0.8em{%
+      \hss\rule[0.4ex]{0.4em}{0.4pt}\hss}%
+    \hfill\kern0pt}]
+  \dir{project}{custom dashed leaders}{
+    \file{main.py}{entry point}
+    \dir{data}{resources}{
+      \file{sample.csv}{sample data}
+    }
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}[
+  dotfill color=purple,
+  dotfill command={%
+    \cleaders\hbox to 0.8em{%
+      \hss\rule[0.4ex]{0.4em}{0.4pt}\hss}%
+    \hfill\kern0pt}]
+  \dir{project}{custom dashed leaders}{
+    \file{main.py}{entry point}
+    \dir{data}{resources}{
+      \file{sample.csv}{sample data}
+    }
+  }
+\end{dirtreex}
+
+For a blank gap, use \verb|dotfill command=\hfill|. Custom commands should
+provide \verb|\hfill| stretch and stay within the normal text height.
+Declarations in the command are scoped to the leader.
+
+\clearpage
+
+% ============================================================
 \section{Per-entry overrides}
 % ============================================================
 
