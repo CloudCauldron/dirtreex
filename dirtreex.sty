@@ -1226,15 +1226,19 @@
 }
 
 %% Root entry: rendered without connectors (nothing above it).
+%% The outer vbox makes height normalisation reposition the
+%% contents from the top, so multiline comments grow downward.
 %% The box's height/depth are renormalised to the standard
 %% 0.7 bls / remainder split so the next entry's position maths
 %% is independent of the root row's intrinsic metrics.
 \def\dte@render@root{%
-  \setbox\dte@tbox=\hbox to\hsize{%
-    \vbox{\strut
-      \zref@label{dte\the\dte@tnum.1}%
-      {\dte@textstyle\dte@format@name{1}\strut}%
-      \dte@format@comment{1}%
+  \setbox\dte@tbox=\vbox{%
+    \hbox to\hsize{%
+      \vbox{\strut
+        \zref@label{dte\the\dte@tnum.1}%
+        {\dte@textstyle\dte@format@name{1}\strut}%
+        \dte@format@comment{1}%
+      }%
     }%
   }%
   \dte@scratch=\ht\dte@tbox
