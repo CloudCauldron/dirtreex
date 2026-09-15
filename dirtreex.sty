@@ -1437,7 +1437,7 @@
 }
 
 \def\dte@output@singleframe{%
-  \par\noindent
+  \ifhmode\else\par\noindent\fi
   \begin{tikzpicture}
     \node[inner sep=0pt,outer sep=0pt,
           anchor=north west,
@@ -1503,6 +1503,61 @@
 %%       there.
 \def\dte@compute@availht@first{%
   \dte@availht=\pagegoal
+  \setbox\dte@splitresult=\box\voidb@x
+  % On an empty outer page, preserve trees that fit whole before
+  % reserving the extra space needed for a split piece.
+  \ifdim\dte@availht=\maxdimen
+    \ifinner\else
+      \par\noindent
+      \ifdte@showbox
+        % Measure the actual picture, including inherited TikZ settings.
+        % The local self-copy preserves the tree for a possible split.
+        \setbox\dte@splitresult=\hbox{%
+          \setbox\dte@framebox=\copy\dte@framebox
+          \dte@output@singleframe
+        }%
+        \dte@tempdim=\ht\dte@splitresult
+        \dte@scratch=\dp\dte@splitresult
+      \else
+        \dte@tempdim=\ht\dte@framebox
+        \dte@scratch=\dp\dte@framebox
+      \fi
+      % TeX allows topskip shrink and final depth up to \maxdepth.
+      \ifdim\dte@tempdim<\topskip \dte@tempdim=\topskip\fi
+      \advance\dte@scratch by-\maxdepth
+      \ifdim\dte@scratch>0pt \advance\dte@tempdim by\dte@scratch\fi
+      \ifdim\dte@tempdim>\vsize
+        \advance\dte@tempdim by-\glueshrink\topskip
+        \ifdim\dte@tempdim>\vsize
+          \dte@availht=\vsize
+          % Preserve ordinary deferral, but not across reserved floats.
+          \ifx\@toplist\@empty
+          \ifx\@botlist\@empty
+            \ifdte@showbox
+              \dte@tempdim=\ht\dte@splitresult
+              \dte@scratch=\dp\dte@splitresult
+            \else
+              \dte@tempdim=\ht\dte@framebox
+              \dte@scratch=\dp\dte@framebox
+            \fi
+            \ifdim\dte@tempdim<\topskip \dte@tempdim=\topskip\fi
+            \advance\dte@scratch by-\@maxdepth
+            \ifdim\dte@scratch>0pt \advance\dte@tempdim by\dte@scratch\fi
+            \ifdim\dte@tempdim>\@colht
+              \advance\dte@tempdim by-\glueshrink\topskip
+            \fi
+            \ifdim\dte@tempdim>\@colht\else
+              \dte@availht=\maxdimen
+            \fi
+          \fi
+          \fi
+          \ifdim\dte@availht=\maxdimen\else
+            \setbox\dte@splitresult=\box\voidb@x
+          \fi
+        \fi
+      \fi
+    \fi
+  \fi
   \advance\dte@availht by-\pagetotal
   \ifdte@showbox
     \advance\dte@availht by-\dimexpr\dte@padT\relax
@@ -1559,8 +1614,25 @@
   % Safety: if we are too close to the page bottom to fit any
   % useful content, flush to the next page and recompute.
   \ifdim\dte@availht<2\baselineskip\relax
-    \newpage
-    \dte@compute@availht@middle
+    \ifhmode
+      \@whiledim\dte@availht<2\baselineskip\do{%
+        \dte@tempdim=\dimexpr\dte@availht+\textheight-\vsize\relax
+        \ifdim\dte@tempdim<2\baselineskip
+          % An unusably small full column cannot make split progress.
+          \dte@availht=\maxdimen
+        \else
+          % A zero-height line lets newpage advance an empty float column.
+          \begingroup
+            \topskip=0pt\hbox{}\par
+          \endgroup
+          \newpage
+          \dte@compute@availht@first
+        \fi
+      }%
+    \else
+      \newpage
+      \dte@compute@availht@middle
+    \fi
   \fi
   \dte@tempdim=\ht\dte@framebox
   \advance\dte@tempdim by\dp\dte@framebox
@@ -1571,9 +1643,13 @@
     % entirely. With box=true we wrap it in a TikZ frame; with
     % box=false we drop it bare into the surrounding vertical list.
     \ifdte@showbox
-      \dte@output@singleframe
+      \ifvoid\dte@splitresult
+        \dte@output@singleframe
+      \else
+        \box\dte@splitresult\par
+      \fi
     \else
-      \par\noindent\box\dte@framebox\par
+      \ifhmode\else\par\noindent\fi\box\dte@framebox\par
     \fi
   \fi
 }
@@ -1645,7 +1721,7 @@
 %%  Tree-extension vrules use the `tree break at` offsets
 %%  (tbA / tbB) instead of the box offsets.
 \def\dte@drawpiece#1{%
-  \par\noindent
+  \ifhmode\else\par\noindent\fi
   \global\advance\dte@piecenum by 1\relax
   \edef\dte@piecetype{#1}%
   \def\dte@pfirst{first}\def\dte@pmiddle{middle}\def\dte@plast{last}%
