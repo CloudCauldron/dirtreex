@@ -274,8 +274,8 @@
   %% a rounded arc of that radius. The dispatch in
   %% \dte@draw@connector reads the resolved dimen directly.
   elbow radius/.code={\dte@elbowR=#1\relax},
-  %% --- per-entry style overrides (consumed by \dir[...] / \file[...]) ---
-  %% The four handlers below write to LOCAL temps; \dte@store@entry@opts
+  %% --- per-entry options (consumed by \dir[...] / \file[...]) ---
+  %% The handlers below write to LOCAL temps; \dte@store@entry@opts
   %% wraps its call to \pgfkeys in \begingroup/\endgroup so the temps
   %% never escape to global scope. Do NOT change these to \gdef without
   %% also removing the surrounding group at the consumer site.
@@ -284,6 +284,7 @@
   line width/.code={\def\dte@tmp@entry@lw{#1}},
   line style/.code={\def\dte@tmp@entry@ls{#1}},
   elbow radius/.code={\def\dte@tmp@entry@er{#1}},
+  icon/.code={\def\dte@tmp@entry@icon{#1}},
 }
 
 %% ============================================================
@@ -315,6 +316,7 @@
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i lw\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i ls\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i er\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@e\the\dte@i i\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@pos@\the\dte@i\endcsname\relax
       \advance\dte@i by 1\relax
     \repeat
@@ -364,15 +366,16 @@
 %%  Entry storage
 %% ============================================================
 %% Each entry is stored as a family of csname'd macros keyed by
-%% its 1-based index N and a single-letter field suffix:
+%% its 1-based index N and a field suffix:
 %%   d  = depth, n = name, c = comment,
 %%   t  = type (1=dir, 0=file, 2=archive),
 %%   l  = is-last-child flag, a = active-depth list,
 %%   lc = line colour override, lw = line width override,
 %%   ls = line style override, er = elbow-radius override.
-%% Depth and type are \xdef'd (they are numeric literals and
-%% safe to expand); the remaining textual fields are \gdef'd to
-%% preserve any unexpanded tokens the user supplied.
+%%   i  = unexpanded icon content.
+%% In \dte@estore, depth and type are \xdef'd (numeric literals);
+%% names and comments are \gdef'd to preserve the user's tokens.
+%% Per-entry options are stored separately below.
 \def\dte@estore#1#2#3#4#5{%
   \expandafter\xdef\csname dte@e#1d\endcsname{#2}%
   \expandafter\gdef\csname dte@e#1n\endcsname{#3}%
@@ -382,22 +385,26 @@
 \def\dte@eget#1#2{\csname dte@e#1#2\endcsname}
 
 %% Parse the optional bracketed style block of a \dir[...] or
-%% \file[...] call and bind the four per-entry override slots.
+%% \file[...] call and bind the per-entry option slots.
 %%   #1 = option string, #2 = entry index.
-%% The four slots always exist after this call (possibly empty),
+%% All slots always exist after this call (possibly empty),
 %% which simplifies downstream retrieval.
 %%
-%% \dte@tmp@entry@{lc,lw,ls,er} are LOCAL temporaries -- they live
+%% \dte@tmp@entry@{lc,lw,ls,er,icon} are LOCAL temporaries -- they live
 %% only between \begingroup and \endgroup here. The pgfkeys handlers
 %% under /dte/entry/.cd (above) also use \def (not \gdef) so the
 %% user-supplied value is written at the same group level. The four
 %% \xdef writes inside the group store the per-entry override
 %% globally; reading the local temps at \xdef time is fine because
 %% expansion happens before \endgroup fires.
+%% The icon slot uses \global\let to copy the macro without expanding
+%% its contents, so graphics and other typesetting commands run only
+%% when the name formatter renders this entry.
 \def\dte@store@entry@opts#1#2{%
   \begingroup
     \def\dte@tmp@entry@lc{}\def\dte@tmp@entry@lw{}%
     \def\dte@tmp@entry@ls{}\def\dte@tmp@entry@er{}%
+    \def\dte@tmp@entry@icon{}%
     \def\dte@tmp@opts{#1}%
     \ifx\dte@tmp@opts\@empty\else
       \pgfkeys{/dte/entry/.cd,#1}%
@@ -406,6 +413,7 @@
     \expandafter\xdef\csname dte@e#2lw\endcsname{\dte@tmp@entry@lw}%
     \expandafter\xdef\csname dte@e#2ls\endcsname{\dte@tmp@entry@ls}%
     \expandafter\xdef\csname dte@e#2er\endcsname{\dte@tmp@entry@er}%
+    \expandafter\global\expandafter\let\csname dte@e#2i\endcsname\dte@tmp@entry@icon
   \endgroup
 }
 
@@ -681,8 +689,9 @@
 %%  Public extension hook: \DirtreexFormatName
 %%
 %%  Receives the 1-based entry index as #1. The default
-%%  expansion is the stored name (slot `n') followed by a
-%%  trailing `/' for directories (slot `t' = 1).
+%%  output is the optional icon (slot `i'), a nonbreaking 0.5em
+%%  gap, and the stored name (slot `n'), with a trailing `/' for
+%%  directories (slot `t' = 1). An empty icon adds no gap.
 %%
 %%  Users may \renewcommand this to inject icons, glyphs, or
 %%  styling around the entry name. The replacement runs inside
@@ -697,12 +706,15 @@
 %%
 %%  SEMVER-STABLE PUBLIC SURFACE. The package commits to keeping
 %%  \DirtreexFormatName's single-argument convention and the
-%%  \DirtreexGetField{#1}{n} / \DirtreexGetField{#1}{t} accessors
-%%  stable across minor versions. Only slot keys `n' (entry name)
-%%  and `t' (type flag: 1 for dirs, 0 for files, 2 for archives)
+%%  \DirtreexGetField accessors for `n', `t', and `i'
+%%  stable across minor versions. These slot keys (entry name,
+%%  type flag: 1 for dirs, 0 for files, 2 for archives, and icon code)
 %%  are guaranteed stable; other slot keys exist internally but
 %%  may change.
 \newcommand{\DirtreexFormatName}[1]{%
+  \expandafter\ifx\csname dte@e#1i\endcsname\@empty\else
+    \hbox{\dte@eget{#1}{i}}\nobreak\hspace{0.5em}%
+  \fi
   \dte@eget{#1}{n}%
   \ifnum\dte@eget{#1}{t}=1 /\fi
 }

@@ -1773,8 +1773,83 @@ A delimiter \emph{collision} corrupts silently rather than erroring: \verb=\verb
 \clearpage
 
 % ============================================================
-\section{Icon dispatch with \texttt{\textbackslash DirtreexFormatName}}
+\section{Item icons}
 % ============================================================
+
+Put a symbol or image directly in \verb|icon={...}|, as in this small tree:
+
+\begin{Verbatim}
+\begin{dirtreex}
+  \dir[icon={+}]{project}{root}{
+    \verbfile[icon={\includegraphics[height=1.5ex]{assets/python.png}}]
+      |main_app.py|{entry point}
+  }
+\end{dirtreex}
+\end{Verbatim}
+
+\begin{dirtreex}
+  \dir[icon={+}]{project}{root}{
+    \verbfile[icon={\includegraphics[height=1.5ex]{assets/python.png}}]
+      |main_app.py|{entry point}
+  }
+\end{dirtreex}
+
+\subsection{Per-entry icons}
+
+Use \verb|icon={...}| to choose an icon for an individual entry. The option
+works with both normal and verbatim names. The default name formatter adds
+a nonbreaking \verb|0.5em| gap after each icon; entries without an icon keep
+their usual spacing. Font and colour declarations inside an icon are local.
+
+The PNG icons use \verb|\includegraphics| for sizing and \verb|\raisebox| for
+baseline placement. The files are in \verb|assets/|, and the \verb|!| prefix
+is ordinary TeX content.
+
+Here, \verb|\entryicon| simply avoids repeating the image-sizing code. The outer group keeps that helper definition local to this example.
+
+\begin{Verbatim}
+\begingroup
+\newcommand{\entryicon}[1]{%
+  \raisebox{-.15em}{\includegraphics[height=.9em]{assets/#1}}}
+\begin{dirtreex}[dotfill color=gray]
+  \verbdir[icon={\entryicon{directory.png}}]|project_$STAGE|{root}{
+    \dir[icon={\entryicon{directory.png}}]{src}{source code}{
+      \verbfile[icon={\entryicon{python.png}}]|main_app.py|{entry point}
+      \file[icon={\color{red}\bfseries !}]{TODO.txt}{review needed}
+    }
+    \archive[icon={\entryicon{zip_file.png}}]{data.zip}{resources}{
+      \verbfile|sample_data.csv|{no icon inherited}
+    }
+    \file{LICENSE}{no icon}
+  }
+\end{dirtreex}
+\endgroup
+\end{Verbatim}
+
+\begingroup
+\newcommand{\entryicon}[1]{%
+  \raisebox{-.15em}{\includegraphics[height=.9em]{assets/#1}}}
+\begin{dirtreex}[dotfill color=gray]
+  \verbdir[icon={\entryicon{directory.png}}]|project_$STAGE|{root}{
+    \dir[icon={\entryicon{directory.png}}]{src}{source code}{
+      \verbfile[icon={\entryicon{python.png}}]|main_app.py|{entry point}
+      \file[icon={\color{red}\bfseries !}]{TODO.txt}{review needed}
+    }
+    \archive[icon={\entryicon{zip_file.png}}]{data.zip}{resources}{
+      \verbfile|sample_data.csv|{no icon inherited}
+    }
+    \file{LICENSE}{no icon}
+  }
+\end{dirtreex}
+\endgroup
+
+An explicit \verb|icon={}| also adds no prefix or gap. Each icon is stored
+without expansion and is rendered in the tree's font. Size and position
+image icons to fit the normal text height and depth.
+
+\clearpage
+
+\subsection{Automatic icons with \texttt{\textbackslash DirtreexFormatName}}
 
 The public hook \verb|\DirtreexFormatName| controls how each entry's name is typeset. Override it with \verb|\renewcommand| and dispatch on the entry's \verb|t| slot (0 for files, 1 for directories, 2 for archives) to attach per-type icons. The example below pulls three PNG glyphs from the \verb|assets/| directory shipped with this repository and renders one in front of every entry name:
 
@@ -1833,5 +1908,10 @@ The public hook \verb|\DirtreexFormatName| controls how each entry's name is typ
 \endgroup
 
 The \verb|\begingroup|/\verb|\endgroup| wrapper scopes both \verb|\newcommand| and \verb|\renewcommand|, so the override does not leak into anything compiled after this section. To apply the icons document-wide, place the two definitions in your preamble instead.
+
+This hook replaces the complete name formatter, including per-entry icon
+handling. To keep that handling when decorating names, save and call the
+original \verb|\DirtreexFormatName|. For full control,
+\verb|\DirtreexGetField{#1}{i}| retrieves the raw icon code.
 
 \end{document}
