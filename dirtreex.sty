@@ -87,7 +87,7 @@
 %% ============================================================
 %%  Boxes
 %% ============================================================
-\newsavebox\dte@tbox  % per-entry text box (name + comment)
+\newsavebox\dte@tbox  % entry text or measured split picture
 
 %% ============================================================
 %%  Dimensions
@@ -111,7 +111,7 @@
 
 \newbox\dte@framebox      % the tree as a single vbox, before splitting
 \newbox\dte@splitresult   % one \vsplit chunk of the above
-\newbox\dte@extbox        % reserved for extension drawing
+\newbox\dte@extbox        % trial remainder while measuring a split piece
 \newbox\dte@bodybox       % discardable env-body capture; never unboxed
 
 %% ============================================================
@@ -1563,6 +1563,7 @@
     \fi
   \fi
   \advance\dte@availht by-\pagetotal
+  \dte@scratch=\dte@availht
   \ifdte@showbox
     \advance\dte@availht by-\dimexpr\dte@padT\relax
     \advance\dte@availht by-2\dimexpr\dte@borderwidth\relax
@@ -1574,8 +1575,8 @@
   \advance\dte@availht by-\dimexpr\dte@tbA\relax
 }
 %% Available height for a middle piece (both sides open). Takes
-%% a full textheight, subtracts tree-break-at offsets (tbB top,
-%% tbA bottom), the two border widths, one baselineskip safety
+%% the remaining column room, subtracts tree-break-at offsets
+%% (tbB top, tbA bottom), the two border widths, one baselineskip safety
 %% pad, and the leader space prepended above the first row.
 %% The frame's torn-edge offsets bbB / bbA are applied
 %% independently inside \dte@drawpiece (see prompt 07).
@@ -1586,6 +1587,15 @@
 %% `tbA=0pt` would still leave a visible ~1 em gap).
 \def\dte@compute@availht@middle{%
   \dte@availht=\textheight
+  \ifinner\else
+    % LaTeX's pending vsize already accounts for top and bottom floats.
+    \dte@availht=\pagegoal
+    \ifdim\dte@availht=\maxdimen \dte@availht=\vsize\fi
+    \advance\dte@availht by-\pagetotal
+    \ifdim\pagetotal>0pt \advance\dte@availht by-\lineskip\fi
+  \fi
+  % Keep the undeducted capacity for fit and full-column progress checks.
+  \dte@scratch=\dte@availht
   \advance\dte@availht by-\dimexpr\dte@tbB\relax
   \advance\dte@availht by-\dimexpr\dte@tbA\relax
   \ifdte@showbox
@@ -1593,6 +1603,15 @@
     \advance\dte@availht by-\baselineskip
   \fi
   \advance\dte@availht by-\dte@leader@dim
+}
+
+%% Exercise the page builder so newpage also advances an empty float column.
+\def\dte@skipcolumn{%
+  \begingroup
+    \offinterlineskip
+    \topskip=0pt\hbox{}\par
+  \endgroup
+  \newpage
 }
 
 \def\dte@output@breakable{%
@@ -1618,24 +1637,27 @@
   % Safety: if we are too close to the page bottom to fit any
   % useful content, flush to the next page and recompute.
   \ifdim\dte@availht<2\baselineskip\relax
+    \ifhmode\else
+      \newpage
+      \dte@compute@availht@middle
+      \ifdim\dte@scratch<\textheight
+        % A constrained new column needs the first-piece fit/progress path.
+        \dte@compute@availht@first
+        \ifhmode\else\par\nobreak\noindent\fi
+      \fi
+    \fi
     \ifhmode
       \@whiledim\dte@availht<2\baselineskip\do{%
-        \dte@tempdim=\dimexpr\dte@availht+\textheight-\vsize\relax
+        \dte@tempdim=\dimexpr\dte@availht+\textheight-\dte@scratch\relax
         \ifdim\dte@tempdim<2\baselineskip
           % An unusably small full column cannot make split progress.
           \dte@availht=\maxdimen
         \else
-          % A zero-height line lets newpage advance an empty float column.
-          \begingroup
-            \topskip=0pt\hbox{}\par
-          \endgroup
-          \newpage
+          \dte@skipcolumn
           \dte@compute@availht@first
+          \ifhmode\else\par\nobreak\noindent\fi
         \fi
       }%
-    \else
-      \newpage
-      \dte@compute@availht@middle
     \fi
   \fi
   \dte@tempdim=\ht\dte@framebox
@@ -1684,32 +1706,124 @@
   \newpage
   \dte@dosplit@cont
 }
-\def\dte@dosplit@cont{%
-  % Middle or last piece. While the remaining framebox still
-  % exceeds a middle-piece allotment, split another middle piece
-  % off; otherwise emit the whole remainder as the last piece.
-  \advance\dte@pagecount by 1\relax
+%% Measure the provided content in the current continuation paragraph.
+\def\dte@measurepiece#1{%
+  \edef\dte@piecetype{#1}%
+  \setbox\dte@tbox=\hbox{\dte@drawpiece{#1}}%
+  \dte@tempdim=\dimexpr\ht\dte@tbox+\dp\dte@tbox-\maxdepth\relax
+  \ifdim\dte@tempdim<\ht\dte@tbox \dte@tempdim=\ht\dte@tbox\fi
+}
+% A measured draw advances the global piece counter even when rejected.
+\def\dte@discardpiece{%
+  \global\advance\dte@piecenum by-1\relax
+  \setbox\dte@tbox=\box\voidb@x
+}
+\def\dte@retrycolumn{%
+  \dte@skipcolumn
+  \par\nobreak\noindent
   \dte@compute@availht@middle
-  \dte@tempdim=\ht\dte@framebox
-  \advance\dte@tempdim by\dp\dte@framebox
-  \ifdim\dte@tempdim>\dte@availht
-    %% Re-pin \splitmaxdepth=0pt for box=false at every middle-piece
-    %% split.  \dte@dosplit set it for the first piece and the
-    %% setting persists through the env group, but stamping it
-    %% explicitly here keeps the intent local to the call site and
-    %% survives any future refactor that hoists either macro out of
-    %% the shared scope. Box=true keeps the LaTeX default to avoid
-    %% resizing already-framed pieces -- see \dte@dosplit.
-    \ifdte@showbox\else
-      \splitmaxdepth=0pt\relax
+  \@tempswatrue
+}
+\def\dte@dosplit@cont{%
+  \advance\dte@pagecount by 1\relax
+  \ifinner\else\par\nobreak\noindent\fi
+  \topskip=0pt\relax
+  \dte@compute@availht@middle
+  \@tempswatrue
+  \@whilesw\if@tempswa\fi{%
+    \@tempswafalse
+    \setbox\dte@tbox=\box\voidb@x
+    \ifdim\dte@scratch<\textheight
+      % A closed bottom or inherited picture settings can also make
+      % a last piece larger than its raw content.
+      \setbox\dte@splitresult=\copy\dte@framebox
+      \dte@measurepiece{last}%
+      \ifdim\dte@tempdim>\dte@scratch
+        \dte@discardpiece
+        \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht\else
+          \ifdim\dte@tempdim>\textheight\else
+            % The whole last piece can fit a normal column.
+            \dte@retrycolumn
+          \fi
+        \fi
+        \if@tempswa\else
+          % Repack the next indivisible chunk to its natural size.
+          \setbox\dte@tbox=\vbox{%
+            \vbadness=10000 \vfuzz=\maxdimen
+            \setbox\dte@tbox=\copy\dte@framebox
+            \setbox\dte@tbox=\vsplit\dte@tbox to0pt
+            \unvbox\dte@tbox
+          }%
+          \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
+          \setbox\dte@tbox=\box\voidb@x
+          \ifdim\dte@availht<\dte@minht\relax
+            \ifdim\dimexpr\dte@availht+\textheight-\dte@scratch\relax<\dte@minht\relax
+              % Preserve the diagnosed oversized-row fallback.
+            \else
+              \dte@retrycolumn
+            \fi
+          \else
+            % Keep the original tree until the rendered piece fits.
+            \setbox\dte@extbox=\copy\dte@framebox
+            \dte@tempdim=\splitmaxdepth
+            \splitmaxdepth=0pt\relax
+            \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
+            \splitmaxdepth=\dte@tempdim
+            \dte@measurepiece{middle}%
+            \ifdim\dte@tempdim>\dte@scratch
+              \ifdim\dte@availht>\dte@minht\relax
+                % Correct the measured excess without shrinking below
+                % the next chunk. Its actual picture gets a fit trial.
+                \advance\dte@tempdim by-\dte@scratch
+                \advance\dte@availht by-\dte@tempdim
+                \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
+                \dte@discardpiece
+                \@tempswatrue
+              \else
+                \ifdim\dte@tempdim>\textheight
+                  % Even the minimum rendered chunk exceeds a normal
+                  % column. Emit it once with the usual overflow diagnosis.
+                \else
+                  \dte@discardpiece
+                  \dte@retrycolumn
+                \fi
+              \fi
+            \fi
+            \if@tempswa\else
+              \setbox\dte@framebox=\box\dte@extbox
+            \fi
+          \fi
+        \fi
+      \fi
     \fi
-    \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
-    \dte@drawpiece{middle}%
-    \newpage
-    \expandafter\dte@dosplit@cont
+  }%
+  \ifvoid\dte@tbox
+    \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
+    \ifdim\dte@tempdim>\dte@availht
+      % Full-column and oversized-row fallback retain their depth policy.
+      \dte@tempdim=\splitmaxdepth
+      \ifdte@showbox
+        \ifdim\dte@scratch<\textheight \splitmaxdepth=0pt\relax\fi
+      \else
+        \splitmaxdepth=0pt\relax
+      \fi
+      \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
+      \splitmaxdepth=\dte@tempdim
+      \dte@drawpiece{middle}%
+      \newpage
+      % Close both conditionals before continuing on the next page.
+      \expandafter\expandafter\expandafter\dte@dosplit@cont
+    \else
+      \setbox\dte@splitresult=\box\dte@framebox
+      \dte@drawpiece{last}%
+    \fi
   \else
-    \setbox\dte@splitresult=\box\dte@framebox
-    \dte@drawpiece{last}%
+    \box\dte@tbox\par
+    \ifx\dte@piecetype\dte@pmiddle
+      \newpage
+      % Close both conditionals before continuing on the next page.
+      \expandafter\expandafter\expandafter\dte@dosplit@cont
+    \fi
   \fi
 }
 
@@ -1855,6 +1969,18 @@
     \fi\fi
     \fi
     %
+    % The content and frame already define a reduced column's extent.
+    % Extension strokes must not enlarge it and move the sized piece
+    % onto a different reserved column. Restore the bounds before end hooks.
+    \begingroup
+    \let\dte@endbounds\relax
+    \ifx\dte@piecetype\dte@pfirst\else
+      \ifdim\dte@scratch<\textheight
+        \let\dte@endbounds\endpgfinterruptboundingbox
+        \pgfinterruptboundingbox
+      \fi
+    \fi
+    %
     % --- Top extension vrules (middle and last pieces) ---
     %
     % Each active-depth column inherited from the previous piece
@@ -1980,6 +2106,8 @@
         \fi
       \fi
     \fi
+    \dte@endbounds
+    \endgroup
   \end{tikzpicture}\par
 }
 
