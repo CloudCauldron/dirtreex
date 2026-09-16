@@ -2710,6 +2710,8 @@
           -2\dimexpr\dte@borderwidth\relax
         \fi\relax
       \dte@fontsize\relax
+      % Reapplying the font declaration may restore fixed end space.
+      \advance\parfillskip by-\dimexpr\parfillskip\relax\relax
       %% Capture \baselineskip under the tree's actual font into
       %% \dte@bls. The local read inside this vbox drives
       %% \dte@render@tree's row stride; the \global write lifts the
