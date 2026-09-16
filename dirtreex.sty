@@ -1633,6 +1633,9 @@
 }
 
 \def\dte@output@breakable{%
+  % Capture outer mode before picture and trial-measurement boxing.
+  \let\dte@endbounds\endpgfinterruptboundingbox
+  \ifinner\let\dte@endbounds\relax\fi
   % Materialise the leader space into an allocated dimen once
   % per environment, before any consumer
   % (\dte@compute@availht@middle or \dte@drawpiece) reads it.
@@ -1747,17 +1750,35 @@
   \ifinner\else\par\nobreak\noindent\fi
   \topskip=0pt\relax
   \dte@compute@availht@middle
+  \let\dte@fulllastfit\relax
   \@tempswatrue
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
     \setbox\dte@tbox=\box\voidb@x
-    \ifdim\dte@scratch<\textheight
+    \dte@tempdim=\dte@scratch
+    \ifdim\dte@tempdim<\textheight\else
+      \ifinner\else
+        % Full columns retain their ordinary split decision. Only a
+        % would-be last piece needs its closing padding measured.
+        \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht\else
+          \let\dte@fulllastfit\@empty
+        \fi
+        \ifx\dte@fulllastfit\@empty \dte@tempdim=0pt\relax\fi
+      \fi
+    \fi
+    \ifdim\dte@tempdim<\textheight
       % A closed bottom or inherited picture settings can also make
       % a last piece larger than its raw content.
       \setbox\dte@splitresult=\copy\dte@framebox
       \dte@measurepiece{last}%
       \ifdim\dte@tempdim>\dte@scratch
         \dte@discardpiece
+        \ifx\dte@fulllastfit\@empty
+          % Leave content for the closing frame instead of consuming
+          % the whole remainder as an open middle piece.
+          \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox-1sp\relax
+          \ifdim\dte@availht>\dte@tempdim \dte@availht=\dte@tempdim\relax\fi
+        \fi
         \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht\else
           \ifdim\dte@tempdim>\textheight\else
             % The whole last piece can fit a normal column.
@@ -1774,6 +1795,11 @@
           }%
           \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
           \setbox\dte@tbox=\box\voidb@x
+          \dte@tempdim=\maxdimen
+          \ifx\dte@fulllastfit\@empty
+            \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
+          \fi
+          \ifdim\dte@minht<\dte@tempdim
           \ifdim\dte@availht<\dte@minht\relax
             \ifdim\dimexpr\dte@availht+\textheight-\dte@scratch\relax<\dte@minht\relax
               % Preserve the diagnosed oversized-row fallback.
@@ -1787,7 +1813,18 @@
             \splitmaxdepth=0pt\relax
             \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
             \splitmaxdepth=\dte@tempdim
-            \dte@measurepiece{middle}%
+            \def\dte@piecetype{middle}%
+            \ifx\dte@fulllastfit\@empty
+              \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+                % Injected shrinkable glue can consume the entire trial.
+                % Retain the diagnosed last piece; never create empty
+                % middle pieces merely to search for a closing fit.
+                \dte@availht=\dte@minht\relax
+                \setbox\dte@splitresult=\copy\dte@framebox
+                \def\dte@piecetype{last}%
+              \fi
+            \fi
+            \dte@measurepiece{\dte@piecetype}%
             \ifdim\dte@tempdim>\dte@scratch
               \ifdim\dte@availht>\dte@minht\relax
                 % Correct the measured excess without shrinking below
@@ -1811,6 +1848,12 @@
               \setbox\dte@framebox=\box\dte@extbox
             \fi
           \fi
+          \else
+            % No smaller closing piece exists. Keep its diagnostic and
+            % emit it once, including when padding alone is too large.
+            \setbox\dte@splitresult=\copy\dte@framebox
+            \dte@measurepiece{last}%
+          \fi
         \fi
       \fi
     \fi
@@ -1819,13 +1862,21 @@
     \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
     \ifdim\dte@tempdim>\dte@availht
       % Two-column continuations count the entire final row's depth.
-      % Framed single-column output retains its original depth policy.
+      % Full outer single-column frames allow only the normal row depth.
       \dte@tempdim=\splitmaxdepth
       \ifdte@showbox
         \ifdte@columns
           \splitmaxdepth=0pt\relax
         \else
-          \ifdim\dte@scratch<\textheight \splitmaxdepth=0pt\relax\fi
+          \ifdim\dte@scratch<\textheight
+            \splitmaxdepth=0pt\relax
+          \else
+            \ifinner\else
+              \ifdim\splitmaxdepth>0.3\dte@bls
+                \splitmaxdepth=0.3\dte@bls
+              \fi
+            \fi
+          \fi
         \fi
       \else
         \splitmaxdepth=0pt\relax
@@ -1992,21 +2043,11 @@
     \fi\fi
     \fi
     %
-    % Keep continuation strokes out of the reserved bounds in reduced
-    % or two-column layouts. Restore the bounds before end hooks.
+    % Content and frame define the split bounds. Decorative extensions
+    % must not enlarge outer pieces. Restore the bounds before end hooks.
     \begingroup
-    \let\dte@endbounds\relax
-    \ifx\dte@piecetype\dte@pfirst\else
-      \ifdte@columns
-        \let\dte@endbounds\endpgfinterruptboundingbox
-      \else
-        \ifdim\dte@scratch<\textheight
-          \let\dte@endbounds\endpgfinterruptboundingbox
-        \fi
-      \fi
-      \ifx\dte@endbounds\relax\else
-        \pgfinterruptboundingbox
-      \fi
+    \ifx\dte@endbounds\relax\else
+      \pgfinterruptboundingbox
     \fi
     %
     % --- Top extension vrules (middle and last pieces) ---
