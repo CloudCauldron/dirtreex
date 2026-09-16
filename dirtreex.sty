@@ -1681,27 +1681,54 @@
   \newpage
 }
 
+%% Select a positive natural chunk, retaining leading zero-height material
+%% and a copied remainder. #1 is the depth cap; #2 is the selection target.
+\def\dte@split@minimum#1#2{%
+  \edef\dte@restoreminimum{%
+    \vbadness=\the\vbadness\relax \vfuzz=\the\vfuzz\relax
+    \splittopskip=\the\splittopskip\relax
+    \splitmaxdepth=\the\splitmaxdepth\relax
+    \everyvbox{\the\everyvbox}}%
+  \vbadness=10000 \vfuzz=\maxdimen
+  % Cover a negative selection target plus the source's natural extent.
+  \advance\vfuzz by\maxdimen
+  \splittopskip=0pt\relax
+  \everyvbox{}%
+  \ifdim#2<0pt\relax
+    \splitmaxdepth=0pt\relax
+    % Give the strict probe a break before leading shrink is counted.
+    \setbox\dte@extbox=\vbox{%
+      \hrule height0pt depth0pt width0pt
+      \unvcopy\dte@framebox
+    }%
+  \else
+    \setbox\dte@extbox=\copy\dte@framebox
+  \fi
+  \setbox\dte@splitresult=\box\voidb@x
+  \@tempswatrue
+  \@whilesw\if@tempswa\fi{%
+    \edef\dte@chunkstart{\the\dimexpr
+      \ht\dte@splitresult+\dp\dte@splitresult\relax}%
+    \setbox\dte@tbox=\vsplit\dte@extbox to#2\relax
+    \setbox\dte@splitresult=\vbox{%
+      \boxmaxdepth=#1\relax
+      \unvbox\dte@splitresult
+      \unvbox\dte@tbox
+    }%
+    \@tempswafalse
+    \ifdim\dimexpr\ht\dte@splitresult+\dp\dte@splitresult\relax>\dte@chunkstart\relax\else
+      \ifvoid\dte@extbox\else\@tempswatrue\fi
+    \fi
+  }%
+  \dte@restoreminimum
+}
 %% Natural size and tail depth of the next chunk, without consuming rows.
 %% Return its total in minht and its depth in tempdim.
 \def\dte@compute@minht{%
   \setbox\dte@tbox=\vbox{%
-    \vbadness=10000 \vfuzz=\maxdimen
     \boxmaxdepth=\maxdimen
-    \splittopskip=0pt\relax
-    % Internal repacking must not repeat user box hooks.
-    \everyvbox{}%
-    \setbox\dte@extbox=\copy\dte@framebox
-    \@tempswatrue
-    \@whilesw\if@tempswa\fi{%
-      \setbox\dte@tbox=\vsplit\dte@extbox to0pt
-      \setbox\dte@tbox=\vbox{\unvbox\dte@tbox}%
-      \@tempswafalse
-      \ifdim\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax>0pt\relax\else
-        % A leading kern or penalty can yield an empty prefix.
-        \ifvoid\dte@extbox\else\@tempswatrue\fi
-      \fi
-      \unvbox\dte@tbox
-    }%
+    \dte@split@minimum{\maxdimen}{0pt}%
+    \unvbox\dte@splitresult
   }%
   \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
   \dte@tempdim=\dp\dte@tbox
@@ -2030,6 +2057,39 @@
   \setbox\dte@splitresult=\vsplit#1 to\dte@availht
   \splitmaxdepth=\dte@tempdim
 }
+\def\dte@natural@split{%
+  % Probe only the selected rows, preserving the split's depth policy.
+  \edef\dte@restorevbox{\everyvbox{\the\everyvbox}}%
+  \everyvbox{}%
+  \setbox\dte@tbox=\vbox{%
+    \boxmaxdepth=\dp\dte@splitresult
+    \unvcopy\dte@splitresult
+  }%
+  \dte@restorevbox
+  \edef\dte@compression{\the\dimexpr
+    \ht\dte@tbox+\dp\dte@tbox
+    -\ht\dte@splitresult-\dp\dte@splitresult\relax}%
+}
+\def\dte@classify@split{%
+  \def\dte@piecetype{middle}%
+  \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+    % Keep the selected row box intact while appending a pruned tail.
+    \ifvoid\dte@extbox\else
+      % Append the pruned zero-height tail without repeating box hooks
+      % or changing either box's glue setting.
+      \edef\dte@restorevbox{\everyvbox{\the\everyvbox}}%
+      \everyvbox{}%
+      \setbox\dte@splitresult=\vbox{%
+        \boxmaxdepth=0pt\relax
+        \box\dte@splitresult
+        \nointerlineskip
+        \box\dte@extbox
+      }%
+      \dte@restorevbox
+    \fi
+    \def\dte@piecetype{last}%
+  \fi
+}
 \def\dte@dosplit@cont{%
   \advance\dte@pagecount by 1\relax
   \ifinner\else\par\nobreak\noindent\fi
@@ -2037,6 +2097,7 @@
   \dte@compute@availht@middle
   \let\dte@fullfit\relax
   \let\dte@measure@cont\dte@measurepiece
+  \def\dte@compression{0pt}%
   \@tempswatrue
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
@@ -2060,8 +2121,8 @@
       \ifdim\dte@tempdim>\dte@scratch
         \dte@discardpiece
         \ifx\dte@fullfit\@empty
-          % Leave content for the closing frame instead of consuming
-          % the whole remainder as an open middle piece.
+          % Prefer a strict prefix. Shrinkable glue may still permit a
+          % terminal split, which is measured as a closing picture below.
           \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox-1sp\relax
           \ifdim\dte@availht>\dte@tempdim \dte@availht=\dte@tempdim\relax\fi
         \fi
@@ -2073,6 +2134,13 @@
         \fi
         \if@tempswa\else
           \dte@compute@minht
+          \ifdim\dte@minht<\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax\else
+            % Leading shrink can make even a zero-target probe consume
+            % every row. Force an early break before declaring it indivisible.
+            \dte@split@minimum{0pt}{-\maxdimen}%
+            \edef\dte@minht{\the\dimexpr
+              \ht\dte@splitresult+\dp\dte@splitresult\relax}%
+          \fi
           \dte@tempdim=\maxdimen
           \ifx\dte@fullfit\@empty
             \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
@@ -2086,35 +2154,52 @@
             \fi
           \else
             % Keep the original tree until the rendered piece fits.
-            \setbox\dte@extbox=\copy\dte@framebox
-            \dte@tempdim=\splitmaxdepth
-            \splitmaxdepth=0pt\relax
-            \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
-            \splitmaxdepth=\dte@tempdim
-            \def\dte@piecetype{middle}%
-            \ifx\dte@fullfit\@empty
-              \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
-                % Injected shrinkable glue can consume the entire trial.
-                % Retain the diagnosed last piece; never create empty
-                % middle pieces merely to search for a closing fit.
-                \dte@availht=\dte@minht\relax
-                \setbox\dte@splitresult=\copy\dte@framebox
-                \def\dte@piecetype{last}%
-              \fi
+            \ifdim\dte@availht=\dte@minht\relax
+              \ifdim\dte@compression>0pt \@tempswatrue\fi
             \fi
+            \if@tempswa
+              % Large shrink can keep selecting the whole list even at
+              % minht. Select the actual minimum chunk instead.
+              \dte@split@minimum{0pt}{-\maxdimen}%
+            \else
+              \setbox\dte@extbox=\copy\dte@framebox
+              \dte@tempdim=\splitmaxdepth
+              \splitmaxdepth=0pt\relax
+              \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
+              \splitmaxdepth=\dte@tempdim
+            \fi
+            \dte@natural@split
+            % Keep natural row spacing, but preserve a larger target's
+            % empty bottom space so ordinary fixed-glue layouts are exact.
+            \ifdim\dte@compression<0pt
+              \ht\dte@tbox=\ht\dte@splitresult
+              \dp\dte@tbox=\dp\dte@splitresult
+            \fi
+            \setbox\dte@splitresult=\box\dte@tbox
+            \dte@classify@split
             \dte@measure@cont{\dte@piecetype}%
             \ifdim\dte@tempdim>\dte@scratch
               \ifdim\dte@availht>\dte@minht\relax
                 % Correct the measured excess without shrinking below
                 % the next chunk. Its actual picture gets a fit trial.
+                % Also undo the observed compression so retries cannot
+                % creep through the same row selection one sp at a time.
+                \ifdim\dte@tempdim<\dimexpr\dte@scratch+\dte@compression\relax
+                  \dte@tempdim=\dimexpr\dte@scratch+\dte@compression\relax
+                \fi
                 \dte@retry@smaller
               \else
-                \ifdim\dte@tempdim>\textheight
-                  % Even the minimum rendered chunk exceeds a normal
-                  % column. Emit it once with the usual overflow diagnosis.
-                \else
+                \ifdim\dte@compression>0pt
                   \dte@discardpiece
-                  \dte@retrycolumn
+                  \@tempswatrue
+                \else
+                  \ifdim\dte@tempdim>\textheight
+                    % Even the minimum rendered chunk exceeds a normal
+                    % column. Emit it once with the usual overflow diagnosis.
+                  \else
+                    \dte@discardpiece
+                    \dte@retrycolumn
+                  \fi
                 \fi
               \fi
             \fi
@@ -2137,8 +2222,20 @@
           % Try the unchanged full-column split before consuming its rows.
           \setbox\dte@extbox=\copy\dte@framebox
           \dte@splitmiddle\dte@extbox
+          \def\dte@piecetype{middle}%
+          % Reconsider a genuinely compressed terminal picture; retain
+          % ordinary depth-only splits and diagnosed oversized rows.
+          \ifnum\badness>\@M\else
+            \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+              \dte@natural@split
+              \ifdim\dte@compression>0pt
+                \setbox\dte@splitresult=\box\dte@tbox
+                \dte@classify@split
+              \fi
+            \fi
+          \fi
           \let\dte@measure@cont\dte@measure@direct
-          \dte@measure@cont{middle}%
+          \dte@measure@cont{\dte@piecetype}%
           \ifdim\dte@tempdim>\dte@scratch
             \dte@discardpiece
             % Reuse the measured prefix/closing fitter on this column.
