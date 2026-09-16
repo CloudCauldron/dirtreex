@@ -1557,9 +1557,9 @@
 %% The box=true branch's \baselineskip reservation already absorbs
 %% these contributions, so no separate terms are added there.
 \def\dte@compute@availht@first{%
-  \ifdte@showbox\ifinner\else\ifvmode
+  \ifinner\else\ifvmode
     \edef\dte@firstprevdepth{\the\prevdepth}%
-  \fi\fi\fi
+  \fi\fi
   \dte@availht=\pagegoal
   \setbox\dte@splitresult=\box\voidb@x
   % On an empty outer page, preserve trees that fit whole before
@@ -1750,6 +1750,7 @@
   \ifinner\else
     \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
       \dte@compute@minht
+      \let\dte@firstminht\dte@minht
       \ifdte@showbox
         % A framed split charges only depth beyond its permitted tail.
         \ifdim\dte@tempdim>\splitmaxdepth \dte@tempdim=\splitmaxdepth\fi
@@ -1828,9 +1829,9 @@
   \def\dte@pfirst{first}\def\dte@pmiddle{middle}\def\dte@plast{last}%
   \splittopskip=0pt\relax
   \let\dte@first@output\dte@dosplit@first
-  \ifdte@showbox\ifinner\else
+  \ifinner\else
     \let\dte@first@output\dte@dosplit@first@fit
-  \fi\fi
+  \fi
   \dte@first@output
 }
 \def\dte@splitfirst#1{%
@@ -1861,7 +1862,7 @@
   \newpage
   \dte@dosplit@cont
 }
-%% Fit an outer framed first picture before consuming its original rows.
+%% Fit an outer first picture before consuming its original rows.
 \def\dte@dosplit@first@fit{%
   \ifhmode\else
     \ifdim\pagegoal=\maxdimen \let\dte@firstfresh\@empty\fi
@@ -1883,6 +1884,7 @@
     \setbox\dte@extbox=\copy\dte@framebox
     \dte@splitfirst\dte@extbox
     \setbox\dte@tbox=\box\voidb@x
+    \ifdte@showbox
     \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax=0pt\relax
       % If the trial consumes the tree, prefer a fitting closed frame
       % to an open first piece followed by an empty closing piece.
@@ -1893,6 +1895,7 @@
       \ifdim\dte@tempdim>\dte@scratch
         \setbox\dte@tbox=\box\voidb@x
       \fi
+    \fi
     \fi
     \ifvoid\dte@tbox
       \dte@measurepiece{first}%
@@ -1979,6 +1982,13 @@
   \setbox\dte@tbox=\hbox{\dte@drawpiece{#1}}%
   \dte@measureheight\maxdepth
 }
+\def\dte@measure@direct#1{%
+  % A formerly direct picture must not gain a wrapper's hbox hook.
+  \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
+  \everyhbox{\dte@restorehbox}%
+  \dte@measurepiece{#1}%
+  \dte@restorehbox
+}
 \def\dte@measureheight#1{%
   \dte@tempdim=\dimexpr\ht\dte@tbox+\dp\dte@tbox-#1\relax
   \ifdim\dte@tempdim<\ht\dte@tbox \dte@tempdim=\ht\dte@tbox\fi
@@ -2001,12 +2011,32 @@
   \dte@compute@availht@middle
   \@tempswatrue
 }
+\def\dte@splitmiddle#1{%
+  % Preserve the established depth policy for an ordinary middle slice.
+  \dte@tempdim=\splitmaxdepth
+  \ifdte@showbox
+    \ifdte@columns
+      \splitmaxdepth=0pt\relax
+    \else
+      \ifdim\dte@scratch<\textheight
+        \splitmaxdepth=0pt\relax
+      \else
+        \ifinner\else \dte@cap@rowdepth\splitmaxdepth\fi
+      \fi
+    \fi
+  \else
+    \splitmaxdepth=0pt\relax
+  \fi
+  \setbox\dte@splitresult=\vsplit#1 to\dte@availht
+  \splitmaxdepth=\dte@tempdim
+}
 \def\dte@dosplit@cont{%
   \advance\dte@pagecount by 1\relax
   \ifinner\else\par\nobreak\noindent\fi
   \topskip=0pt\relax
   \dte@compute@availht@middle
-  \let\dte@fulllastfit\relax
+  \let\dte@fullfit\relax
+  \let\dte@measure@cont\dte@measurepiece
   \@tempswatrue
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
@@ -2014,22 +2044,22 @@
     \dte@tempdim=\dte@scratch
     \ifdim\dte@tempdim<\textheight\else
       \ifinner\else
-        % Full columns retain their ordinary split decision. Only a
-        % would-be last piece needs its closing padding measured.
+        % Try ordinary full-column splits before invoking the fitter;
+        % a would-be last piece needs its closing padding measured.
         \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht\else
-          \let\dte@fulllastfit\@empty
+          \let\dte@fullfit\@empty
         \fi
-        \ifx\dte@fulllastfit\@empty \dte@tempdim=0pt\relax\fi
+        \ifx\dte@fullfit\@empty \dte@tempdim=0pt\relax\fi
       \fi
     \fi
     \ifdim\dte@tempdim<\textheight
       % A closed bottom or inherited picture settings can also make
       % a last piece larger than its raw content.
       \setbox\dte@splitresult=\copy\dte@framebox
-      \dte@measurepiece{last}%
+      \dte@measure@cont{last}%
       \ifdim\dte@tempdim>\dte@scratch
         \dte@discardpiece
-        \ifx\dte@fulllastfit\@empty
+        \ifx\dte@fullfit\@empty
           % Leave content for the closing frame instead of consuming
           % the whole remainder as an open middle piece.
           \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox-1sp\relax
@@ -2044,7 +2074,7 @@
         \if@tempswa\else
           \dte@compute@minht
           \dte@tempdim=\maxdimen
-          \ifx\dte@fulllastfit\@empty
+          \ifx\dte@fullfit\@empty
             \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
           \fi
           \ifdim\dte@minht<\dte@tempdim
@@ -2062,7 +2092,7 @@
             \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
             \splitmaxdepth=\dte@tempdim
             \def\dte@piecetype{middle}%
-            \ifx\dte@fulllastfit\@empty
+            \ifx\dte@fullfit\@empty
               \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
                 % Injected shrinkable glue can consume the entire trial.
                 % Retain the diagnosed last piece; never create empty
@@ -2072,7 +2102,7 @@
                 \def\dte@piecetype{last}%
               \fi
             \fi
-            \dte@measurepiece{\dte@piecetype}%
+            \dte@measure@cont{\dte@piecetype}%
             \ifdim\dte@tempdim>\dte@scratch
               \ifdim\dte@availht>\dte@minht\relax
                 % Correct the measured excess without shrinking below
@@ -2096,35 +2126,35 @@
             % No smaller closing piece exists. Keep its diagnostic and
             % emit it once, including when padding alone is too large.
             \setbox\dte@splitresult=\copy\dte@framebox
-            \dte@measurepiece{last}%
+            \dte@measure@cont{last}%
           \fi
         \fi
       \fi
     \fi
+    \if@tempswa\else\ifinner\else
+      \ifdim\dte@scratch<\textheight\else
+        \ifx\dte@fullfit\relax
+          % Try the unchanged full-column split before consuming its rows.
+          \setbox\dte@extbox=\copy\dte@framebox
+          \dte@splitmiddle\dte@extbox
+          \let\dte@measure@cont\dte@measure@direct
+          \dte@measure@cont{middle}%
+          \ifdim\dte@tempdim>\dte@scratch
+            \dte@discardpiece
+            % Reuse the measured prefix/closing fitter on this column.
+            \let\dte@fullfit\@empty
+            \@tempswatrue
+          \else
+            \setbox\dte@framebox=\box\dte@extbox
+          \fi
+        \fi
+      \fi
+    \fi\fi
   }%
   \ifvoid\dte@tbox
     \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
     \ifdim\dte@tempdim>\dte@availht
-      % Two-column continuations count the entire final row's depth.
-      % Full outer single-column frames allow only the normal row depth.
-      \dte@tempdim=\splitmaxdepth
-      \ifdte@showbox
-        \ifdte@columns
-          \splitmaxdepth=0pt\relax
-        \else
-          \ifdim\dte@scratch<\textheight
-            \splitmaxdepth=0pt\relax
-          \else
-            \ifinner\else
-              \dte@cap@rowdepth\splitmaxdepth
-            \fi
-          \fi
-        \fi
-      \else
-        \splitmaxdepth=0pt\relax
-      \fi
-      \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
-      \splitmaxdepth=\dte@tempdim
+      \dte@splitmiddle\dte@framebox
       \dte@drawpiece{middle}%
       \newpage
       % Close both conditionals before continuing on the next page.
