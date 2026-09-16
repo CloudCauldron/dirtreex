@@ -36,9 +36,9 @@
 %% that the next environment's \dte@flush@state would then have
 %% to clean up.
 \newif\ifdte@inenv
-%% Raised (globally) whenever a \zref@extractdefault lookup for an
-%% entry's abspage falls back to the 0 default -- meaning the zref
-%% label has not yet been written to the .aux file. Consumed by
+\newif\ifdte@columns
+%% Raised (globally) when an entry's page or required column
+%% position is not yet available from the .aux file. Consumed by
 %% the \AtEndDocument hook at the bottom of this file, which emits
 %% a single "Rerun LaTeX..." \PackageWarningNoLine so that latexmk
 %% and rerunfilecheck know to schedule another pass.
@@ -1143,6 +1143,27 @@
 %% ============================================================
 %%  Main rendering
 %% ============================================================
+%% Row origins share an x coordinate within a column, regardless
+%% of entry depth. PGF records their final positions at shipout.
+\def\dte@markcolumn#1{%
+  \ifdte@columns
+    \pgfsys@markposition{dte\the\dte@tnum.#1}%
+  \fi
+}
+\def\dte@getlocation#1#2{%
+  \edef#2{\zref@extractdefault{dte\the\dte@tnum.#1}{abspage}{0}}%
+  \ifnum#2=0\relax \global\dte@needreruntrue\fi
+  \ifdte@columns
+    \pgfsys@getposition{dte\the\dte@tnum.#1}\dte@rowpos
+    \ifx\dte@rowpos\relax
+      \global\dte@needreruntrue
+    \else
+      \pgfextractx{\dte@scratch}{\dte@rowpos}%
+      \edef#2{#2:\number\dte@scratch}%
+    \fi
+  \fi
+}
+
 %% Horizontal stride per active depth = offset + width + sep.
 %% Used by \dte@render@tree and by the dirtreex env body to
 %% pin the per-row geometry; both call sites must agree, so
@@ -1247,6 +1268,7 @@
   \ht\dte@tbox=0.7\baselineskip
   \dp\dte@tbox=\dte@scratch
   \par\leavevmode
+  \dte@markcolumn{1}%
   \box\dte@tbox
   \endgraf
   \expandafter\xdef\csname dte@pos@1\endcsname{-0.7\baselineskip}%
@@ -1282,6 +1304,7 @@
   %
   % Pass-through vertical lines at active depths.
   \par\leavevmode
+  \dte@markcolumn{#1}%
   \dte@draw@passthrough{#1}%
   %
   % Horizontal skip to the column for this entry's own depth.
@@ -1353,15 +1376,12 @@
 %% ------------------------------------------------------------
 %%  Walk backwards from entry #1 to find the anchor entry: the
 %%  nearest predecessor at strictly-shallower depth that sits
-%%  on the same page. If the walk crosses a page boundary the
+%%  on the same page and column. If the walk crosses a boundary the
 %%  splitflag is raised and \dte@k is reset to #1 itself so the
 %%  connector becomes the cross-page-stub variant.
 %%
-%%  A zero abspage (from \zref@extractdefault's 0 default) means
-%%  the label has not yet landed in the .aux file. That
-%%  condition raises \dte@needreruntrue globally BEFORE the
-%%  comparison branches, so the end-of-document rerun warning
-%%  fires regardless of which branch the comparison takes.
+%%  The shared location lookup requests a rerun when page or
+%%  required column-position data is missing, before comparison.
 \def\dte@findanchor#1{%
   %% Floor guard. The recursion decrements \dte@k each call and
   %% terminates naturally when an entry's depth is <= \dte@j.
@@ -1400,18 +1420,16 @@
     \dte@splitflagtrue
   \else
     \advance\dte@k by -1\relax
-    \edef\dte@pgA{\zref@extractdefault{dte\the\dte@tnum.\the\dte@k}{abspage}{0}}%
-    \edef\dte@pgB{\zref@extractdefault{dte\the\dte@tnum.#1}{abspage}{0}}%
-    \ifnum\dte@pgA=0 \global\dte@needreruntrue\fi
-    \ifnum\dte@pgB=0 \global\dte@needreruntrue\fi
+    \dte@getlocation{\the\dte@k}\dte@pgA
+    \dte@getlocation{#1}\dte@pgB
     \ifx\dte@pgA\dte@pgB
-      % Same page -- keep searching shallower only if we are still
+      % Same column -- keep searching shallower only if we are still
       % strictly deeper than the target.
       \ifnum\dte@eget{\the\dte@k}{d}>\dte@j\relax
         \dte@findanchor{#1}%
       \fi
     \else
-      % Different page -- anchor is on the previous piece. Mark
+      % Different page or column -- anchor is on the previous piece. Mark
       % the connector as a cross-page stub.
       \dte@k=#1\relax
       \dte@splitflagtrue
@@ -1800,10 +1818,15 @@
   \ifvoid\dte@tbox
     \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
     \ifdim\dte@tempdim>\dte@availht
-      % Full-column and oversized-row fallback retain their depth policy.
+      % Two-column continuations count the entire final row's depth.
+      % Framed single-column output retains its original depth policy.
       \dte@tempdim=\splitmaxdepth
       \ifdte@showbox
-        \ifdim\dte@scratch<\textheight \splitmaxdepth=0pt\relax\fi
+        \ifdte@columns
+          \splitmaxdepth=0pt\relax
+        \else
+          \ifdim\dte@scratch<\textheight \splitmaxdepth=0pt\relax\fi
+        \fi
       \else
         \splitmaxdepth=0pt\relax
       \fi
@@ -1969,14 +1992,19 @@
     \fi\fi
     \fi
     %
-    % The content and frame already define a reduced column's extent.
-    % Extension strokes must not enlarge it and move the sized piece
-    % onto a different reserved column. Restore the bounds before end hooks.
+    % Keep continuation strokes out of the reserved bounds in reduced
+    % or two-column layouts. Restore the bounds before end hooks.
     \begingroup
     \let\dte@endbounds\relax
     \ifx\dte@piecetype\dte@pfirst\else
-      \ifdim\dte@scratch<\textheight
+      \ifdte@columns
         \let\dte@endbounds\endpgfinterruptboundingbox
+      \else
+        \ifdim\dte@scratch<\textheight
+          \let\dte@endbounds\endpgfinterruptboundingbox
+        \fi
+      \fi
+      \ifx\dte@endbounds\relax\else
         \pgfinterruptboundingbox
       \fi
     \fi
@@ -2112,32 +2140,25 @@
 }
 
 %% ============================================================
-%%  Cross-page break data (precomputed from zref)
+%%  Page/column break data (precomputed from recorded locations)
 %% ============================================================
 %% Scan the entry list for adjacent pairs that resolve to
-%% different absolute pages and record, per break, the active-
+%% different pages or columns and record, per break, the active-
 %% depth list and the last-entry index on the piece that ends
 %% at that break. Consumed by \dte@drawpiece to emit the
 %% extension vrules and to place the bottom extension's top
 %% anchor.
 %%
-%% A zero abspage means the corresponding zref label has not
-%% landed in the .aux yet. We raise \dte@needreruntrue in both
-%% lookups BEFORE the \ifx comparison so the end-of-document
-%% rerun warning fires no matter how the comparison classifies
-%% the pair.
+%% The shared lookup requests a rerun for missing location data
+%% before comparing either member of the pair.
 \def\dte@compute@breakdata{%
   \dte@breakcount=0\relax
   \ifnum\dte@cnt<2\relax\else
     \dte@i=2\relax
     \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
       \edef\dte@prevIdx{\the\numexpr\dte@i-1\relax}%
-      \edef\dte@pgPrev{%
-        \zref@extractdefault{dte\the\dte@tnum.\dte@prevIdx}{abspage}{0}}%
-      \edef\dte@pgCur{%
-        \zref@extractdefault{dte\the\dte@tnum.\the\dte@i}{abspage}{0}}%
-      \ifnum\dte@pgPrev=0 \global\dte@needreruntrue\fi
-      \ifnum\dte@pgCur=0  \global\dte@needreruntrue\fi
+      \dte@getlocation{\dte@prevIdx}\dte@pgPrev
+      \dte@getlocation{\the\dte@i}\dte@pgCur
       \ifx\dte@pgPrev\dte@pgCur\else
         \advance\dte@breakcount by 1\relax
         \dte@store@breaklines{\dte@prevIdx}{\the\dte@breakcount}%
@@ -2148,7 +2169,7 @@
 }
 
 \def\dte@store@breaklines#1#2{%
-  % #1 = index of the last entry on the previous page.
+  % #1 = index of the last entry in the previous column/piece.
   % #2 = 1-based break number.
   %
   % Start from the active-depth list of the last entry, and
@@ -2258,6 +2279,9 @@
   \else
     % Finish the surrounding paragraph before tree font or glue changes.
     \par
+    % Capture the outer layout before row and picture boxing.
+    \dte@columnsfalse
+    \if@twocolumn\ifinner\else\dte@columnstrue\fi\fi
     \dte@preprocess
     \dte@compute@breakdata
     %
