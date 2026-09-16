@@ -1520,9 +1520,12 @@
 %%       That \lineskip pushes the picture - and therefore the
 %%       bar's bottom (which sits at C.south = picture baseline) -
 %%       one \lineskip below the configured `tree break at' line.
-%%       The box=true branch's \baselineskip reservation already
-%%       absorbs both contributions, so no separate term is added
-%%       there.
+%%   (c) \pagedepth for an outer split - \pagetotal excludes the last
+%%       box's depth, which the next paragraph's glue adds to the
+%%       used height. Omitting it can push an already-sized first
+%%       piece onto a later page with less room reserved by floats.
+%% The box=true branch's \baselineskip reservation already absorbs
+%% these contributions, so no separate terms are added there.
 \def\dte@compute@availht@first{%
   \dte@availht=\pagegoal
   \setbox\dte@splitresult=\box\voidb@x
@@ -1582,6 +1585,7 @@
   \fi
   \advance\dte@availht by-\pagetotal
   \dte@scratch=\dte@availht
+  \advance\dte@availht by-\dimexpr\dte@tbA\relax
   \ifdte@showbox
     \advance\dte@availht by-\dimexpr\dte@padT\relax
     \advance\dte@availht by-2\dimexpr\dte@borderwidth\relax
@@ -1589,8 +1593,18 @@
   \else
     \advance\dte@availht by-\parskip
     \advance\dte@availht by-\lineskip
+    \ifinner\else
+      % A whole bare box retains its depth below the baseline. Charge
+      % any larger preceding depth before accepting that whole box.
+      \dte@tempdim=\dp\dte@framebox
+      \ifdim\dte@tempdim<\pagedepth \dte@tempdim=\pagedepth\fi
+      \ifdim\dimexpr\ht\dte@framebox+\dte@tempdim\relax>\dte@availht
+        \advance\dte@availht by-\pagedepth
+        % Keep the existing full-column progress estimate consistent.
+        \advance\dte@scratch by-\pagedepth
+      \fi
+    \fi
   \fi
-  \advance\dte@availht by-\dimexpr\dte@tbA\relax
 }
 %% Available height for a middle piece (both sides open). Takes
 %% the remaining column room, subtracts tree-break-at offsets
@@ -1632,6 +1646,18 @@
   \newpage
 }
 
+%% Natural size of the next indivisible chunk, without consuming rows.
+\def\dte@compute@minht{%
+  \setbox\dte@tbox=\vbox{%
+    \vbadness=10000 \vfuzz=\maxdimen
+    \setbox\dte@tbox=\copy\dte@framebox
+    \setbox\dte@tbox=\vsplit\dte@tbox to0pt
+    \unvbox\dte@tbox
+  }%
+  \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
+  \setbox\dte@tbox=\box\voidb@x
+}
+
 \def\dte@output@breakable{%
   % Capture outer mode before picture and trial-measurement boxing.
   \let\dte@endbounds\endpgfinterruptboundingbox
@@ -1655,22 +1681,51 @@
   \dte@contentwd=\wd\dte@framebox
   \dte@pagecount=0\relax
   \dte@compute@availht@first
+  \ifdte@showbox\else\ifinner\else\ifhmode\else
+    \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
+      % Settle pending list glue before committing a first split.
+      \par
+      \dte@compute@availht@first
+    \fi
+  \fi\fi\fi
+  \def\dte@minht{2\baselineskip}%
+  \ifdte@showbox\else\ifinner\else
+    \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
+      \dte@compute@minht
+      % Seek enough room for the first row, up to a normal column's
+      % capacity. Larger rows retain the diagnosed finite split fallback.
+      \ifdim\dte@minht>\dimexpr\dte@availht+\textheight-\dte@scratch\relax
+        \edef\dte@minht{\the\dimexpr\dte@availht+\textheight-\dte@scratch\relax}%
+      \fi
+      \ifdim\dte@minht<2\baselineskip\relax
+        \def\dte@minht{2\baselineskip}%
+      \fi
+    \fi
+  \fi\fi
   % Safety: if we are too close to the page bottom to fit any
   % useful content, flush to the next page and recompute.
-  \ifdim\dte@availht<2\baselineskip\relax
+  \ifdim\dte@availht<\dte@minht\relax
     \ifhmode\else
       \newpage
       \dte@compute@availht@middle
+      \@tempswafalse
       \ifdim\dte@scratch<\textheight
-        % A constrained new column needs the first-piece fit/progress path.
+        \@tempswatrue
+      \fi
+      \ifdim\dte@minht>2\baselineskip\relax
+        \ifdim\dte@availht<\dte@minht\relax \@tempswatrue\fi
+      \fi
+      \if@tempswa
+        % Recheck first-piece room on a constrained column, or when
+        % the middle-piece reservation would exclude a fitting first row.
         \dte@compute@availht@first
         \ifhmode\else\par\nobreak\noindent\fi
       \fi
     \fi
     \ifhmode
-      \@whiledim\dte@availht<2\baselineskip\do{%
+      \@whiledim\dte@availht<\dte@minht\relax\do{%
         \dte@tempdim=\dimexpr\dte@availht+\textheight-\dte@scratch\relax
-        \ifdim\dte@tempdim<2\baselineskip
+        \ifdim\dte@tempdim<\dte@minht\relax
           % An unusably small full column cannot make split progress.
           \dte@availht=\maxdimen
         \else
@@ -1786,15 +1841,7 @@
           \fi
         \fi
         \if@tempswa\else
-          % Repack the next indivisible chunk to its natural size.
-          \setbox\dte@tbox=\vbox{%
-            \vbadness=10000 \vfuzz=\maxdimen
-            \setbox\dte@tbox=\copy\dte@framebox
-            \setbox\dte@tbox=\vsplit\dte@tbox to0pt
-            \unvbox\dte@tbox
-          }%
-          \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
-          \setbox\dte@tbox=\box\voidb@x
+          \dte@compute@minht
           \dte@tempdim=\maxdimen
           \ifx\dte@fulllastfit\@empty
             \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
