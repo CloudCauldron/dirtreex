@@ -290,11 +290,9 @@
 %% ============================================================
 %%  State lifecycle
 %% ============================================================
-%% Clear every per-entry and per-break global left over from a
-%% previous dirtreex environment. Must run BEFORE \dte@cnt and
-%% \dte@breakcount are reset to zero at the start of a new
-%% environment, because the loops below use those counters as
-%% their upper bound.
+%% Clear every per-entry global left over from a previous dirtreex
+%% environment, before \dte@cnt is reset to zero. Break tables are
+%% local to their environment and need no explicit cleanup.
 %%
 %% Also clears the per-entry render-time anchor cache
 %% \dte@pos@<N>, written by \dte@render@root / \dte@render@entry.
@@ -318,16 +316,6 @@
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i er\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i i\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@pos@\the\dte@i\endcsname\relax
-      \advance\dte@i by 1\relax
-    \repeat
-  \fi
-  \ifnum\dte@breakcount>0
-    \dte@i=1\relax
-    \loop\ifnum\dte@i<\numexpr\dte@breakcount+1\relax
-      \expandafter\global\expandafter\let
-        \csname dte@breaklines@\the\dte@i\endcsname\relax
-      \expandafter\global\expandafter\let
-        \csname dte@breakidx@\the\dte@i\endcsname\relax
       \advance\dte@i by 1\relax
     \repeat
   \fi
@@ -1085,6 +1073,23 @@
     \dte@resolve@lc{\dte@pt@src}\dte@pt@lc
     \dte@resolve@lw{\dte@pt@src}\dte@pt@lw
     \dte@resolve@ls{\dte@pt@src}\dte@pt@ls
+    % An unclipped future connector already spans this row's tail.
+    % Extend only when a boundary clips that connector; the grouped
+    % lookup preserves the current row's geometry.
+    \def\dte@ptD{0.3\baselineskip}%
+    \ifx\dte@rowtail\relax\else
+      \begingroup
+        \dte@j=\dte@k
+        \dte@k=\dte@pt@src\relax
+        \dte@splitflagfalse
+        \dte@findanchor{\dte@pt@src}%
+        \ifdte@splitflag
+          \endgroup
+          \let\dte@ptD\dte@rowtail
+        \else
+          \endgroup
+        \fi
+    \fi
     \ifnum\dte@k=\dte@ownd\relax
       % Own-depth column. Split the column at arc-top
       % (baseline + 0.2 bls + connE):
@@ -1111,13 +1116,13 @@
         \hss
       }%
       % Lower half: from arc-top down to row bottom.
-      %   raise = 0,  h = 0.2 bls + connE,  d = 0.3 bls.
+      %   raise = 0, h = 0.2 bls + connE, d = the row's tail depth.
       \dte@ptH=0.2\baselineskip
       \advance\dte@ptH by\dte@ptE\relax
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
-          \dte@drawvert{0pt}{\dte@ptH}{0.3\baselineskip}%
+          \dte@drawvert{0pt}{\dte@ptH}{\dte@ptD}%
             {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
           \hss
         }%
@@ -1129,7 +1134,7 @@
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
-          \dte@drawvert{0pt}{0.7\baselineskip}{0.3\baselineskip}%
+          \dte@drawvert{0pt}{0.7\baselineskip}{\dte@ptD}%
             {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
           \hss
         }%
@@ -1271,7 +1276,7 @@
   \dte@markcolumn{1}%
   \box\dte@tbox
   \endgraf
-  \expandafter\xdef\csname dte@pos@1\endcsname{-0.7\baselineskip}%
+  \expandafter\xdef\csname dte@pos@1\endcsname{\the\dimexpr-0.7\baselineskip\relax}%
   \dte@tempdim=\dte@scratch\relax
 }
 
@@ -1302,10 +1307,9 @@
   \dte@findanchor{#1}%
   \edef\dte@anchoridx{\the\dte@k}%
   %
-  % Pass-through vertical lines at active depths.
+  % Establish the paragraph and record the common row origin.
   \par\leavevmode
   \dte@markcolumn{#1}%
-  \dte@draw@passthrough{#1}%
   %
   % Horizontal skip to the column for this entry's own depth.
   % Computed as (depth - 1) * \dte@all + \dte@offset, all in a
@@ -1342,6 +1346,25 @@
   \expandafter\xdef\csname dte@pos@#1\endcsname{\the\dte@tempdim}%
   \advance\dte@tempdim by\dte@scratch\relax
   \advance\dte@tempdim by 0.7\baselineskip
+  %
+  % Boundary extensions already cover the final row's tail.
+  % Save extra depth only for a row followed on the same piece.
+  \let\dte@rowtail\relax
+  \ifdim\dp\dte@tbox>0.3\baselineskip
+    \ifnum#1<\dte@cnt
+      \dte@getlocation{#1}\dte@pgA
+      \dte@getlocation{\number\numexpr#1+1\relax}\dte@pgB
+      \ifx\dte@pgA\dte@pgB
+        \edef\dte@rowtail{\the\dp\dte@tbox}%
+      \fi
+    \fi
+  \fi
+  % Keep text-box preparation at its established indentation, then
+  % return to the row origin for the zero-width pass-through drawing.
+  \dte@scratch=\dimexpr\numexpr\dte@j-1\relax\dte@all+\dte@offset\relax
+  \kern-\dte@scratch
+  \dte@draw@passthrough{#1}%
+  \kern\dte@scratch
   %
   % Connector vertical height = distance to anchor, trimmed so
   % the vertical stops at the anchor's text bottom rather than
@@ -1489,6 +1512,13 @@
   \end{tikzpicture}\par
 }
 
+\def\dte@box@singleframe#1{%
+  \setbox#1=\hbox{%
+    \setbox\dte@framebox=\copy\dte@framebox
+    \dte@output@singleframe
+  }%
+}
+
 %% Leader space prepended to every non-first piece so the first
 %% entry's connector has a `│` of one baselineskip feeding into
 %% it from above.  \dte@leader@dim is populated from 0.5\dte@bls
@@ -1527,20 +1557,21 @@
 %% The box=true branch's \baselineskip reservation already absorbs
 %% these contributions, so no separate terms are added there.
 \def\dte@compute@availht@first{%
+  \ifdte@showbox\ifinner\else\ifvmode
+    \edef\dte@firstprevdepth{\the\prevdepth}%
+  \fi\fi\fi
   \dte@availht=\pagegoal
   \setbox\dte@splitresult=\box\voidb@x
   % On an empty outer page, preserve trees that fit whole before
   % reserving the extra space needed for a split piece.
   \ifdim\dte@availht=\maxdimen
     \ifinner\else
+      \let\dte@firstfresh\@empty
       \par\noindent
       \ifdte@showbox
         % Measure the actual picture, including inherited TikZ settings.
         % The local self-copy preserves the tree for a possible split.
-        \setbox\dte@splitresult=\hbox{%
-          \setbox\dte@framebox=\copy\dte@framebox
-          \dte@output@singleframe
-        }%
+        \dte@box@singleframe\dte@splitresult
         \dte@tempdim=\ht\dte@splitresult
         \dte@scratch=\dp\dte@splitresult
       \else
@@ -1617,17 +1648,21 @@
 %% open-bottom frame edge; for `box=false` there is no frame to
 %% collide with and the pad is omitted (otherwise a bare-tree default
 %% `tbA=0pt` would still leave a visible ~1 em gap).
-\def\dte@compute@availht@middle{%
-  \dte@availht=\textheight
+\def\dte@compute@capacity{%
+  % Shared physical room before piece-specific padding and leader space.
+  \dte@scratch=\textheight
   \ifinner\else
     % LaTeX's pending vsize already accounts for top and bottom floats.
-    \dte@availht=\pagegoal
-    \ifdim\dte@availht=\maxdimen \dte@availht=\vsize\fi
-    \advance\dte@availht by-\pagetotal
-    \ifdim\pagetotal>0pt \advance\dte@availht by-\lineskip\fi
+    \dte@scratch=\pagegoal
+    \ifdim\dte@scratch=\maxdimen \dte@scratch=\vsize\fi
+    \advance\dte@scratch by-\pagetotal
+    \ifdim\pagetotal>0pt \advance\dte@scratch by-\lineskip\fi
   \fi
+}
+\def\dte@compute@availht@middle{%
   % Keep the undeducted capacity for fit and full-column progress checks.
-  \dte@scratch=\dte@availht
+  \dte@compute@capacity
+  \dte@availht=\dte@scratch
   \advance\dte@availht by-\dimexpr\dte@tbB\relax
   \advance\dte@availht by-\dimexpr\dte@tbA\relax
   \ifdte@showbox
@@ -1646,19 +1681,40 @@
   \newpage
 }
 
-%% Natural size of the next indivisible chunk, without consuming rows.
+%% Natural size and tail depth of the next chunk, without consuming rows.
+%% Return its total in minht and its depth in tempdim.
 \def\dte@compute@minht{%
   \setbox\dte@tbox=\vbox{%
     \vbadness=10000 \vfuzz=\maxdimen
-    \setbox\dte@tbox=\copy\dte@framebox
-    \setbox\dte@tbox=\vsplit\dte@tbox to0pt
-    \unvbox\dte@tbox
+    \boxmaxdepth=\maxdimen
+    \splittopskip=0pt\relax
+    % Internal repacking must not repeat user box hooks.
+    \everyvbox{}%
+    \setbox\dte@extbox=\copy\dte@framebox
+    \@tempswatrue
+    \@whilesw\if@tempswa\fi{%
+      \setbox\dte@tbox=\vsplit\dte@extbox to0pt
+      \setbox\dte@tbox=\vbox{\unvbox\dte@tbox}%
+      \@tempswafalse
+      \ifdim\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax>0pt\relax\else
+        % A leading kern or penalty can yield an empty prefix.
+        \ifvoid\dte@extbox\else\@tempswatrue\fi
+      \fi
+      \unvbox\dte@tbox
+    }%
   }%
   \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
+  \dte@tempdim=\dp\dte@tbox
   \setbox\dte@tbox=\box\voidb@x
 }
 
+%% Framed slices may retain the normal row depth, but no multiline excess.
+\def\dte@cap@rowdepth#1{%
+  \ifdim#1>0.3\dte@bls #1=0.3\dte@bls\fi
+}
+
 \def\dte@output@breakable{%
+  \let\dte@firstfresh\relax
   % Capture outer mode before picture and trial-measurement boxing.
   \let\dte@endbounds\endpgfinterruptboundingbox
   \ifinner\let\dte@endbounds\relax\fi
@@ -1680,18 +1736,30 @@
   % density.
   \dte@contentwd=\wd\dte@framebox
   \dte@pagecount=0\relax
+  \def\dte@firstprevdepth{-1000pt}%
   \dte@compute@availht@first
-  \ifdte@showbox\else\ifinner\else\ifhmode\else
+  \ifinner\else\ifhmode\else
     \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
       % Settle pending list glue before committing a first split.
       \par
       \dte@compute@availht@first
     \fi
-  \fi\fi\fi
+  \fi\fi
   \def\dte@minht{2\baselineskip}%
-  \ifdte@showbox\else\ifinner\else
+  \let\dte@firstminht\dte@minht
+  \ifinner\else
     \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
       \dte@compute@minht
+      \ifdte@showbox
+        % A framed split charges only depth beyond its permitted tail.
+        \ifdim\dte@tempdim>\splitmaxdepth \dte@tempdim=\splitmaxdepth\fi
+        \dte@cap@rowdepth\dte@tempdim
+        \edef\dte@minht{\the\dimexpr\dte@minht-\dte@tempdim\relax}%
+        \let\dte@firstminht\dte@minht
+        % Keep the preliminary threshold; the measured first picture
+        % decides whether the taller chunk fits this column.
+        \def\dte@minht{2\baselineskip}%
+      \fi
       % Seek enough room for the first row, up to a normal column's
       % capacity. Larger rows retain the diagnosed finite split fallback.
       \ifdim\dte@minht>\dimexpr\dte@availht+\textheight-\dte@scratch\relax
@@ -1701,7 +1769,7 @@
         \def\dte@minht{2\baselineskip}%
       \fi
     \fi
-  \fi\fi
+  \fi
   % Safety: if we are too close to the page bottom to fit any
   % useful content, flush to the next page and recompute.
   \ifdim\dte@availht<\dte@minht\relax
@@ -1757,9 +1825,16 @@
 }
 
 \def\dte@dosplit{%
-  % First piece: split off \dte@availht worth of content from
-  % the top of the framebox and draw it with a closed top / open
-  % bottom. Continue on the next page.
+  \def\dte@pfirst{first}\def\dte@pmiddle{middle}\def\dte@plast{last}%
+  \splittopskip=0pt\relax
+  \let\dte@first@output\dte@dosplit@first
+  \ifdte@showbox\ifinner\else
+    \let\dte@first@output\dte@dosplit@first@fit
+  \fi\fi
+  \dte@first@output
+}
+\def\dte@splitfirst#1{%
+  % Split the first content from box register #1 using its mode's depth.
   %
   % For box=false: clamp \splitmaxdepth=0pt so \vsplit does NOT
   % swallow arbitrary trailing kern/glue/penalty below the last
@@ -1769,30 +1844,156 @@
   % boundary even after \dte@compute@availht@first has subtracted
   % \parskip. The 0pt cap pins the splitresult bottom to its last
   % row's baseline + that row's depth (no extra glue absorbed).
-  % For box=true the framed-piece geometry already absorbs that
-  % glue inside the bordered region, and changing \splitmaxdepth
-  % would visibly resize every framed piece -- so we leave it at
-  % the LaTeX default in the box=true branch.
-  \splittopskip=0pt\relax
-  \ifdte@showbox\else
+  % Outer frames retain normal row depth, charging multiline excess
+  % against the target. Inner frames keep their established geometry.
+  \ifdte@showbox
+    \dte@tempdim=\splitmaxdepth
+    \ifinner\else \dte@cap@rowdepth\splitmaxdepth\fi
+  \else
     \splitmaxdepth=0pt\relax
   \fi
-  \setbox\dte@splitresult=\vsplit\dte@framebox to\dte@availht
+  \setbox\dte@splitresult=\vsplit#1 to\dte@availht
+  \ifdte@showbox \splitmaxdepth=\dte@tempdim\fi
+}
+\def\dte@dosplit@first{%
+  \dte@splitfirst\dte@framebox
   \dte@drawpiece{first}%
   \newpage
   \dte@dosplit@cont
 }
-%% Measure the provided content in the current continuation paragraph.
+%% Fit an outer framed first picture before consuming its original rows.
+\def\dte@dosplit@first@fit{%
+  \ifhmode\else
+    \ifdim\pagegoal=\maxdimen \let\dte@firstfresh\@empty\fi
+    \par\nobreak\noindent
+  \fi
+  \dte@compute@capacity
+  % The progress threshold is capped; an actual trial must contain the
+  % complete first chunk even when it exceeds the nominal reservation.
+  \let\dte@minht\dte@firstminht
+  \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
+  % Preserve fits that use the page's existing shrinkable glue.
+  \advance\dte@scratch by\pageshrink
+  % Skip the hook on trial wrappers, retaining it on their content boxes.
+  \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
+  \everyhbox{\dte@restorehbox}%
+  \@tempswatrue
+  \@whilesw\if@tempswa\fi{%
+    \@tempswafalse
+    \setbox\dte@extbox=\copy\dte@framebox
+    \dte@splitfirst\dte@extbox
+    \setbox\dte@tbox=\box\voidb@x
+    \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax=0pt\relax
+      % If the trial consumes the tree, prefer a fitting closed frame
+      % to an open first piece followed by an empty closing piece.
+      \def\dte@piecetype{single}%
+      \dte@box@singleframe\dte@tbox
+      \dte@measureheight\maxdepth
+      \dte@first@spacing
+      \ifdim\dte@tempdim>\dte@scratch
+        \setbox\dte@tbox=\box\voidb@x
+      \fi
+    \fi
+    \ifvoid\dte@tbox
+      \dte@measurepiece{first}%
+      \dte@first@spacing
+      \ifdim\dte@tempdim>\dte@scratch
+        \ifdim\dte@availht>\dte@minht\relax
+          \dte@retry@smaller
+        \else
+          \dte@measureheight\@maxdepth
+          \ifx\dte@firstfresh\@empty
+            % Retain fresh-paragraph overhead in the progress check;
+            % add back only the column's reserved room.
+            \dte@first@spacing
+            \advance\dte@scratch by\dimexpr\textheight-\vsize\relax
+          \else
+            \dte@first@topskip
+            \dte@scratch=\textheight
+          \fi
+          \ifdim\dte@tempdim>\dte@scratch\else
+            % The minimum can fit a full column. Reconsider the whole tree
+            % there, since it may no longer need a first/middle/last split.
+            \dte@discardpiece
+          \fi
+        \fi
+      \fi
+    \fi
+  }%
+  \dte@restorehbox
+  \ifvoid\dte@tbox
+    \dte@skipcolumn
+    \expandafter\dte@output@breakable
+  \else
+    \setbox\dte@framebox=\box\dte@extbox
+    \box\dte@tbox\par
+    \ifx\dte@piecetype\dte@pfirst
+      \newpage
+      \expandafter\expandafter\expandafter\dte@dosplit@cont
+    \fi
+  \fi
+}
+\def\dte@first@topskip{%
+  \ifdim\ht\dte@tbox<\topskip
+    \advance\dte@tempdim by\dimexpr\topskip-\ht\dte@tbox\relax
+  \fi
+  \advance\dte@tempdim by-\glueshrink\topskip
+}
+\def\dte@first@spacing{%
+  \ifdim\pagetotal=0pt
+    \ifdim\pagegoal=\maxdimen
+      \dte@first@topskip
+    \else
+      % Zero total also permits an existing zero-height predecessor.
+      % Insertions alone can freeze pagegoal before the first box, so
+      % conservatively cover both possible paragraph-start spacings.
+      \edef\dte@first@height{\the\dte@tempdim}%
+      \dte@first@topskip
+      \edef\dte@first@topheight{\the\dte@tempdim}%
+      \dte@tempdim=\dte@first@height\relax
+      \dte@first@interline
+      \ifdim\dte@tempdim<\dte@first@topheight\relax
+        \dte@tempdim=\dte@first@topheight\relax
+      \fi
+    \fi
+  \else
+    % Capacity already reserves lineskip only when pagetotal is positive.
+    \advance\dte@tempdim by-\lineskip
+    \dte@first@interline
+  \fi
+}
+\def\dte@first@interline{%
+  \ifdim\dte@firstprevdepth>-1000pt\relax
+    \ifdim\dimexpr\baselineskip-\dte@firstprevdepth-\ht\dte@tbox\relax<\lineskiplimit
+      \advance\dte@tempdim by\lineskip
+      \advance\dte@tempdim by-\glueshrink\lineskip
+    \else
+      \advance\dte@tempdim by\dimexpr\baselineskip-\dte@firstprevdepth-\ht\dte@tbox\relax
+      \advance\dte@tempdim by-\glueshrink\baselineskip
+    \fi
+  \fi
+}
+%% Measure the provided content in the current output paragraph.
 \def\dte@measurepiece#1{%
   \edef\dte@piecetype{#1}%
   \setbox\dte@tbox=\hbox{\dte@drawpiece{#1}}%
-  \dte@tempdim=\dimexpr\ht\dte@tbox+\dp\dte@tbox-\maxdepth\relax
+  \dte@measureheight\maxdepth
+}
+\def\dte@measureheight#1{%
+  \dte@tempdim=\dimexpr\ht\dte@tbox+\dp\dte@tbox-#1\relax
   \ifdim\dte@tempdim<\ht\dte@tbox \dte@tempdim=\ht\dte@tbox\fi
 }
 % A measured draw advances the global piece counter even when rejected.
 \def\dte@discardpiece{%
   \global\advance\dte@piecenum by-1\relax
   \setbox\dte@tbox=\box\voidb@x
+}
+\def\dte@retry@smaller{%
+  \advance\dte@tempdim by-\dte@scratch
+  \advance\dte@availht by-\dte@tempdim
+  \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
+  \dte@discardpiece
+  \@tempswatrue
 }
 \def\dte@retrycolumn{%
   \dte@skipcolumn
@@ -1876,11 +2077,7 @@
               \ifdim\dte@availht>\dte@minht\relax
                 % Correct the measured excess without shrinking below
                 % the next chunk. Its actual picture gets a fit trial.
-                \advance\dte@tempdim by-\dte@scratch
-                \advance\dte@availht by-\dte@tempdim
-                \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
-                \dte@discardpiece
-                \@tempswatrue
+                \dte@retry@smaller
               \else
                 \ifdim\dte@tempdim>\textheight
                   % Even the minimum rendered chunk exceeds a normal
@@ -1919,9 +2116,7 @@
             \splitmaxdepth=0pt\relax
           \else
             \ifinner\else
-              \ifdim\splitmaxdepth>0.3\dte@bls
-                \splitmaxdepth=0.3\dte@bls
-              \fi
+              \dte@cap@rowdepth\splitmaxdepth
             \fi
           \fi
         \fi
@@ -1963,7 +2158,6 @@
   \ifhmode\else\par\noindent\fi
   \global\advance\dte@piecenum by 1\relax
   \edef\dte@piecetype{#1}%
-  \def\dte@pfirst{first}\def\dte@pmiddle{middle}\def\dte@plast{last}%
   %
   % Continuation pieces (middle / last) are the FIRST hbox on a
   % new page (they immediately follow \newpage in
@@ -2158,11 +2352,11 @@
     %
     % --- Bottom extension vrules (first and middle pieces) ---
     %
-    % Anchored from C.north west: each entry occupies exactly
-    % one baselineskip (ht=0.7 bls, dp=0.3 bls), so row R ends
-    % R*bls below C.north. For middle pieces (piecenum>1) add
-    % the leader offset because the content is shifted down by
-    % that amount inside C. We intentionally anchor from north
+    % Start at the last row's first-line baseline plus its normal
+    % depth. Stored position differences include earlier multiline
+    % excess, but leave the last row's comment tail for the extension
+    % to cover. Add one row height and, for continuations, the leader.
+    % We intentionally anchor from north
     % rather than south, because \vsplit pads \ht\splitresult
     % up to the target height and leaves invisible kern below
     % the last row -- C.south would sit below that kern and
@@ -2173,11 +2367,14 @@
         \relax
       \else
         \dte@scratchcnt=\csname dte@breakidx@\the\dte@piecenum\endcsname\relax
+        \dte@tempdim=\csname dte@pos@\the\dte@scratchcnt\endcsname\relax
+        \dte@scratchcnt=1\relax
         \ifnum\dte@piecenum>1
           \edef\dte@tmp@idx{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
-          \advance\dte@scratchcnt by -\dte@tmp@idx\relax
+          \dte@scratchcnt=\numexpr\dte@tmp@idx+1\relax
         \fi
-        \dte@tempdim=\dte@scratchcnt\dte@bls\relax
+        \advance\dte@tempdim by-\csname dte@pos@\the\dte@scratchcnt\endcsname\relax
+        \advance\dte@tempdim by\dte@bls
         \ifnum\dte@piecenum>1
           \advance\dte@tempdim by\dte@leader@dim\relax
         \fi
@@ -2274,12 +2471,12 @@
       \edef\dte@bklist{\dte@bklist,\dte@eget{#1}{d}}%
     \fi
   \fi
-  \expandafter\xdef\csname dte@breaklines@#2\endcsname{\dte@bklist}%
+  \expandafter\edef\csname dte@breaklines@#2\endcsname{\dte@bklist}%
   % Also remember this piece's last-entry index so \dte@drawpiece
   % can compute the natural last-baseline position without
   % relying on \ht\splitresult (which \vsplit pads up to the
   % target height with invisible kern below the last row).
-  \expandafter\xdef\csname dte@breakidx@#2\endcsname{#1}%
+  \expandafter\edef\csname dte@breakidx@#2\endcsname{#1}%
 }
 
 %% ============================================================
