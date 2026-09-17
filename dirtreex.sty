@@ -1563,6 +1563,7 @@
 %% The box=true branch's \baselineskip reservation already absorbs
 %% these contributions, so no separate terms are added there.
 \def\dte@compute@availht@first{%
+  \let\dte@whole@rejected\relax
   \ifinner\else\ifvmode
     \edef\dte@firstprevdepth{\the\prevdepth}%
   \fi\fi
@@ -1614,6 +1615,7 @@
           \fi
           \fi
           \ifdim\dte@availht=\maxdimen\else
+            \ifdte@showbox \let\dte@whole@rejected\@empty\fi
             \setbox\dte@splitresult=\box\voidb@x
           \fi
         \fi
@@ -1642,6 +1644,66 @@
       \fi
     \fi
   \fi
+  \dte@check@wholefirst
+}
+\def\dte@check@wholefirst{%
+  % A whole-output allowance already settles this decision.
+  \ifdim\dte@availht=\maxdimen\else
+  % A small raw box can still be too tall as a complete frame on a used page.
+  \ifdte@showbox\ifinner\else
+    \ifvoid\dte@splitresult
+      \ifx\dte@whole@rejected\@empty\else
+        \@tempswafalse
+        \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht\else
+          \ifdim\dte@availht<2\baselineskip\else \@tempswatrue\fi
+        \fi
+        % Test whole output before the small-full-column fallback as well.
+        \ifdim\dimexpr\dte@availht+\textheight-\dte@scratch\relax<2\baselineskip
+          \@tempswatrue
+        \fi
+        \if@tempswa
+          \ifhmode\else\par\noindent\fi
+          % Match direct output's box hooks while retaining the measured picture.
+          \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
+          \everyhbox{\dte@restorehbox}%
+          \dte@box@single\dte@tbox\dte@framebox
+          \dte@restorehbox
+          \dimen@=\dte@scratch
+          \dte@compute@capacity
+          \dte@measureheight\maxdepth
+          \dte@first@spacing
+          \advance\dte@tempdim by-\pageshrink
+          \ifdim\dte@tempdim>\dte@scratch
+            \let\dte@whole@rejected\@empty
+            % Retain whole-tree deferral only to an unreserved normal column.
+            \ifx\@toplist\@empty\ifx\@botlist\@empty
+              \dte@measureheight\@maxdepth
+              \dte@first@topskip
+              \ifdim\dte@tempdim>\@colht\else
+                \let\dte@whole@rejected\relax
+              \fi
+            \fi\fi
+          \fi
+          \ifx\dte@whole@rejected\@empty
+            \setbox\dte@tbox=\box\voidb@x
+          \else
+            \setbox\dte@splitresult=\box\dte@tbox
+            \dte@availht=\maxdimen
+          \fi
+          \dte@scratch=\dimen@
+        \fi
+      \fi
+    \fi
+  \fi\fi
+  \fi
+}
+%% A rejected complete picture must not be accepted by its raw content size.
+\def\dte@check@firstsplit{%
+  \@tempswafalse
+  \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
+    \@tempswatrue
+  \fi
+  \ifx\dte@whole@rejected\@empty \@tempswatrue\fi
 }
 %% Available height for a middle piece (both sides open). Takes
 %% the remaining column room, subtracts tree-break-at offsets
@@ -1795,6 +1857,7 @@
 
 \def\dte@output@breakable{%
   \let\dte@firstfresh\relax
+  \let\dte@first@minimum\relax
   % Capture outer mode before picture and trial-measurement boxing.
   \let\dte@endbounds\endpgfinterruptboundingbox
   \ifinner\let\dte@endbounds\relax\fi
@@ -1819,7 +1882,8 @@
   \def\dte@firstprevdepth{-1000pt}%
   \dte@compute@availht@first
   \ifinner\else\ifhmode\else
-    \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
+    \dte@check@firstsplit
+    \if@tempswa
       % Settle pending list glue before committing a first split.
       \par
       \dte@compute@availht@first
@@ -1828,7 +1892,8 @@
   \def\dte@minht{2\baselineskip}%
   \let\dte@firstminht\dte@minht
   \ifinner\else
-    \ifdim\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax>\dte@availht
+    \dte@check@firstsplit
+    \if@tempswa
       \dte@compute@minht
       \let\dte@firstminht\dte@minht
       \ifdte@showbox
@@ -1876,8 +1941,14 @@
       \@whiledim\dte@availht<\dte@minht\relax\do{%
         \dte@tempdim=\dimexpr\dte@availht+\textheight-\dte@scratch\relax
         \ifdim\dte@tempdim<\dte@minht\relax
-          % An unusably small full column cannot make split progress.
           \dte@availht=\maxdimen
+          \ifdte@showbox\ifx\dte@whole@rejected\@empty
+            % Let the measured minimum decide; do not emit a rejected whole tree.
+            \dte@availht=\dte@firstminht\relax
+            \let\dte@minht\dte@firstminht
+            \let\dte@first@minimum\@empty
+          \fi\fi
+          \ifdim\dte@availht=\maxdimen \let\dte@whole@rejected\relax\fi
         \else
           \dte@skipcolumn
           \dte@compute@availht@first
@@ -1886,9 +1957,9 @@
       }%
     \fi
   \fi
-  \dte@tempdim=\ht\dte@framebox
-  \advance\dte@tempdim by\dp\dte@framebox
-  \ifdim\dte@tempdim>\dte@availht
+  \dte@check@wholefirst
+  \dte@check@firstsplit
+  \if@tempswa
     \dte@dosplit
   \else
     % Single-piece path: when the framebox fits, skip the splitter
@@ -1953,6 +2024,14 @@
   \dte@split@to#1%
   \ifdte@showbox \splitmaxdepth=\dte@tempdim\fi
 }
+\def\dte@splitfirst@minimum{%
+  \dte@tempdim=0pt\relax
+  \ifdte@showbox
+    \dte@tempdim=\splitmaxdepth
+    \dte@cap@rowdepth\dte@tempdim
+  \fi
+  \dte@split@minimum{\dte@tempdim}{-\maxdimen}%
+}
 \def\dte@dosplit@first{%
   \setbox\dte@extbox=\copy\dte@framebox
   \dte@splitfirst\dte@extbox
@@ -1993,17 +2072,16 @@
   \@tempswatrue
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
-    \setbox\dte@extbox=\copy\dte@framebox
-    \dte@splitfirst\dte@extbox
-    \ifdim\dte@availht=\dte@minht\relax
-      \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
-        % Shrink can exhaust the tree even at the minimum target.
-        \dte@tempdim=0pt\relax
-        \ifdte@showbox
-          \dte@tempdim=\splitmaxdepth
-          \dte@cap@rowdepth\dte@tempdim
+    \ifx\dte@first@minimum\@empty
+      \dte@splitfirst@minimum
+    \else
+      \setbox\dte@extbox=\copy\dte@framebox
+      \dte@splitfirst\dte@extbox
+      \ifdim\dte@availht=\dte@minht\relax
+        \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+          % Shrink can exhaust the tree even at the minimum target.
+          \dte@splitfirst@minimum
         \fi
-        \dte@split@minimum{\dte@tempdim}{-\maxdimen}%
       \fi
     \fi
     \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
