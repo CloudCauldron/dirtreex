@@ -1512,10 +1512,14 @@
   \end{tikzpicture}\par
 }
 
-\def\dte@box@singleframe#1{%
+\def\dte@box@single#1#2{%
   \setbox#1=\hbox{%
-    \setbox\dte@framebox=\copy\dte@framebox
-    \dte@output@singleframe
+    \setbox\dte@framebox=\copy#2%
+    \ifdte@showbox
+      \dte@output@singleframe
+    \else
+      \box\dte@framebox
+    \fi
   }%
 }
 
@@ -1571,7 +1575,7 @@
       \ifdte@showbox
         % Measure the actual picture, including inherited TikZ settings.
         % The local self-copy preserves the tree for a possible split.
-        \dte@box@singleframe\dte@splitresult
+        \dte@box@single\dte@splitresult\dte@framebox
         \dte@tempdim=\ht\dte@splitresult
         \dte@scratch=\dp\dte@splitresult
       \else
@@ -1754,6 +1758,11 @@
   \setbox\dte@tbox=\vbox{%
     \boxmaxdepth=\maxdimen
     \dte@split@minimum{\maxdimen}{0pt}%
+    \ifdim\dimexpr\ht\dte@splitresult+\dp\dte@splitresult\relax
+        <\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax\else
+      % Leading shrink can make a zero-target probe consume every row.
+      \dte@split@minimum{\maxdimen}{-\maxdimen}%
+    \fi
     \unvbox\dte@splitresult
   }%
   \edef\dte@minht{\the\dimexpr\ht\dte@tbox+\dp\dte@tbox\relax}%
@@ -1925,13 +1934,26 @@
   \ifdte@showbox \splitmaxdepth=\dte@tempdim\fi
 }
 \def\dte@dosplit@first{%
-  \dte@splitfirst\dte@framebox
-  \dte@drawpiece{first}%
-  \newpage
-  \dte@dosplit@cont
+  \setbox\dte@extbox=\copy\dte@framebox
+  \dte@splitfirst\dte@extbox
+  \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt
+    \setbox\dte@framebox=\box\dte@extbox
+    \dte@drawpiece{first}%
+    \newpage
+    \expandafter\dte@dosplit@cont
+  \else
+    \ifdte@showbox
+      \dte@output@singleframe
+    \else
+      \ifhmode\else\par\noindent\fi
+      \box\dte@framebox\par
+    \fi
+  \fi
 }
 %% Fit an outer first picture before consuming its original rows.
 \def\dte@dosplit@first@fit{%
+  \let\dte@first@natural\relax
+  \def\dte@compression{0pt}%
   \ifhmode\else
     \ifdim\pagegoal=\maxdimen \let\dte@firstfresh\@empty\fi
     \par\nobreak\noindent
@@ -1951,42 +1973,72 @@
     \@tempswafalse
     \setbox\dte@extbox=\copy\dte@framebox
     \dte@splitfirst\dte@extbox
-    \setbox\dte@tbox=\box\voidb@x
-    \ifdte@showbox
-    \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax=0pt\relax
-      % If the trial consumes the tree, prefer a fitting closed frame
-      % to an open first piece followed by an empty closing piece.
-      \def\dte@piecetype{single}%
-      \dte@box@singleframe\dte@tbox
-      \dte@measureheight\maxdepth
-      \dte@first@spacing
-      \ifdim\dte@tempdim>\dte@scratch
-        \setbox\dte@tbox=\box\voidb@x
+    \ifdim\dte@availht=\dte@minht\relax
+      \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+        % Shrink can exhaust the tree even at the minimum target.
+        \dte@tempdim=0pt\relax
+        \ifdte@showbox
+          \dte@tempdim=\splitmaxdepth
+          \dte@cap@rowdepth\dte@tempdim
+        \fi
+        \dte@split@minimum{\dte@tempdim}{-\maxdimen}%
       \fi
     \fi
+    \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+      \let\dte@first@natural\@empty
     \fi
-    \ifvoid\dte@tbox
+    \ifx\dte@first@natural\@empty
+      % Fitting a closed tree must not introduce compressed connectors.
+      % Keep natural row spacing on subsequent prefix retries too.
+      \dte@natural@split
+      \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt
+        \ifdim\dte@compression>0pt
+          \setbox\dte@splitresult=\box\dte@tbox
+        \fi
+      \else
+        \setbox\dte@splitresult=\box\dte@tbox
+      \fi
+    \fi
+    \dte@classify@split\dte@extbox
+    \ifx\dte@piecetype\dte@pmiddle
       \dte@measurepiece{first}%
-      \dte@first@spacing
-      \ifdim\dte@tempdim>\dte@scratch
-        \ifdim\dte@availht>\dte@minht\relax
-          \dte@retry@smaller
+    \else
+      % The classifier keeps any pruned zero-height tail with the rows.
+      \def\dte@piecetype{single}%
+      % A complete tree keeps its original final depth, not the split cap.
+      \ht\dte@splitresult=\dimexpr
+        \ht\dte@splitresult+\dp\dte@splitresult-\dp\dte@framebox\relax
+      \dp\dte@splitresult=\dp\dte@framebox
+      \dte@box@single\dte@tbox\dte@splitresult
+      % Balance the shared retry/discard bookkeeping for this trial too.
+      \global\advance\dte@piecenum by 1\relax
+      \dte@measureheight\maxdepth
+    \fi
+    \dte@first@spacing
+    \ifdim\dte@tempdim>\dte@scratch
+      \ifdim\dte@availht>\dte@minht\relax
+        \ifx\dte@piecetype\dte@pfirst\else
+          % Natural repacking removed unused target space from this whole tree.
+          \ifdim\dte@compression<0pt
+            \advance\dte@tempdim by-\dte@compression\relax
+          \fi
+        \fi
+        \dte@retry@smaller
+      \else
+        \dte@measureheight\@maxdepth
+        \ifx\dte@firstfresh\@empty
+          % Retain fresh-paragraph overhead in the progress check;
+          % add back only the column's reserved room.
+          \dte@first@spacing
+          \advance\dte@scratch by\dimexpr\textheight-\vsize\relax
         \else
-          \dte@measureheight\@maxdepth
-          \ifx\dte@firstfresh\@empty
-            % Retain fresh-paragraph overhead in the progress check;
-            % add back only the column's reserved room.
-            \dte@first@spacing
-            \advance\dte@scratch by\dimexpr\textheight-\vsize\relax
-          \else
-            \dte@first@topskip
-            \dte@scratch=\textheight
-          \fi
-          \ifdim\dte@tempdim>\dte@scratch\else
-            % The minimum can fit a full column. Reconsider the whole tree
-            % there, since it may no longer need a first/middle/last split.
-            \dte@discardpiece
-          \fi
+          \dte@first@topskip
+          \dte@scratch=\textheight
+        \fi
+        \ifdim\dte@tempdim>\dte@scratch\else
+          % The minimum can fit a full column. Reconsider the whole tree
+          % there, since it may no longer need a first/middle/last split.
+          \dte@discardpiece
         \fi
       \fi
     \fi
@@ -2067,6 +2119,11 @@
   \setbox\dte@tbox=\box\voidb@x
 }
 \def\dte@retry@smaller{%
+  % Also undo observed compression to avoid repeatedly selecting the
+  % same rows while reducing the target by a tiny measured excess.
+  \ifdim\dte@tempdim<\dimexpr\dte@scratch+\dte@compression\relax
+    \dte@tempdim=\dimexpr\dte@scratch+\dte@compression\relax
+  \fi
   \advance\dte@tempdim by-\dte@scratch
   \advance\dte@availht by-\dte@tempdim
   \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
@@ -2111,11 +2168,12 @@
     \ht\dte@tbox+\dp\dte@tbox
     -\ht\dte@splitresult-\dp\dte@splitresult\relax}%
 }
-\def\dte@classify@split{%
+%% Classify the selected rows and retain any pruned tail from remainder #1.
+\def\dte@classify@split#1{%
   \def\dte@piecetype{middle}%
-  \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
+  \ifdim\dimexpr\ht#1+\dp#1\relax>0pt\else
     % Keep the selected row box intact while appending a pruned tail.
-    \ifvoid\dte@extbox\else
+    \ifvoid#1\else
       % Append the pruned zero-height tail without repeating box hooks
       % or changing either box's glue setting.
       \edef\dte@restorevbox{\everyvbox{\the\everyvbox}}%
@@ -2124,7 +2182,7 @@
         \boxmaxdepth=0pt\relax
         \box\dte@splitresult
         \nointerlineskip
-        \box\dte@extbox
+        \box#1%
       }%
       \dte@restorevbox
     \fi
@@ -2175,13 +2233,6 @@
         \fi
         \if@tempswa\else
           \dte@compute@minht
-          \ifdim\dte@minht<\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax\else
-            % Leading shrink can make even a zero-target probe consume
-            % every row. Force an early break before declaring it indivisible.
-            \dte@split@minimum{0pt}{-\maxdimen}%
-            \edef\dte@minht{\the\dimexpr
-              \ht\dte@splitresult+\dp\dte@splitresult\relax}%
-          \fi
           \dte@tempdim=\maxdimen
           \ifx\dte@fullfit\@empty
             \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
@@ -2217,17 +2268,10 @@
               \dp\dte@tbox=\dp\dte@splitresult
             \fi
             \setbox\dte@splitresult=\box\dte@tbox
-            \dte@classify@split
+            \dte@classify@split\dte@extbox
             \dte@measure@cont{\dte@piecetype}%
             \ifdim\dte@tempdim>\dte@scratch
               \ifdim\dte@availht>\dte@minht\relax
-                % Correct the measured excess without shrinking below
-                % the next chunk. Its actual picture gets a fit trial.
-                % Also undo the observed compression so retries cannot
-                % creep through the same row selection one sp at a time.
-                \ifdim\dte@tempdim<\dimexpr\dte@scratch+\dte@compression\relax
-                  \dte@tempdim=\dimexpr\dte@scratch+\dte@compression\relax
-                \fi
                 \dte@retry@smaller
               \else
                 \ifdim\dte@compression>0pt
@@ -2269,8 +2313,9 @@
           \dte@natural@split
           \ifdim\dte@compression>0pt
             \setbox\dte@splitresult=\box\dte@tbox
-            \dte@classify@split
           \fi
+          % A split can exhaust the tree without compressing its rows.
+          \dte@classify@split\dte@extbox
           \let\dte@measure@cont\dte@measure@direct
           \dte@measure@cont{\dte@piecetype}%
           \ifdim\dte@tempdim>\dte@scratch
@@ -2289,21 +2334,18 @@
     \dte@tempdim=\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax
     \ifdim\dte@tempdim>\dte@availht
       \dte@splitmiddle\dte@framebox
-      \dte@drawpiece{middle}%
-      \newpage
-      % Close both conditionals before continuing on the next page.
-      \expandafter\expandafter\expandafter\dte@dosplit@cont
+      \dte@classify@split\dte@framebox
     \else
       \setbox\dte@splitresult=\box\dte@framebox
-      \dte@drawpiece{last}%
+      \def\dte@piecetype{last}%
     \fi
+    \dte@drawpiece{\dte@piecetype}%
   \else
     \box\dte@tbox\par
-    \ifx\dte@piecetype\dte@pmiddle
-      \newpage
-      % Close both conditionals before continuing on the next page.
-      \expandafter\expandafter\expandafter\dte@dosplit@cont
-    \fi
+  \fi
+  \ifx\dte@piecetype\dte@pmiddle
+    \newpage
+    \expandafter\dte@dosplit@cont
   \fi
 }
 
