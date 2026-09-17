@@ -1567,7 +1567,7 @@
   \ifdim\dte@availht=\maxdimen
     \ifinner\else
       \let\dte@firstfresh\@empty
-      \par\noindent
+      \ifhmode\else\par\noindent\fi
       \ifdte@showbox
         % Measure the actual picture, including inherited TikZ settings.
         % The local self-copy preserves the tree for a possible split.
@@ -1674,11 +1674,37 @@
 
 %% Exercise the page builder so newpage also advances an empty float column.
 \def\dte@skipcolumn{%
+  \let\dte@resumepara\relax
+  \ifhmode\ifinner\else\ifnum\lastnodetype=-1
+    % Suspend an empty logical paragraph, as in the kernel's para/before
+    % handling. Its setup must not be repeated on every attempted column.
+    \begingroup\csname tex_par:D\endcsname\endgroup
+    \let\dte@resumepar\par
+    % Freeze the saved meaning: a page hook may retain this wrapper.
+    \ifx\par\relax \let\par\@empty\fi
+    \expandafter\ifx\csname tex_par:D\endcsname\par
+      \def\par{\csname tex_par:D\endcsname}%
+    \fi
+    \toks@\expandafter{\par}%
+    \protected\edef\dte@skip@par{%
+      \noexpand\relax\noexpand\ifhmode\the\toks@\noexpand\fi}%
+    \let\par\dte@skip@par
+    \let\dte@resumepara\dte@resume@paragraph
+  \fi\fi\fi
   \begingroup
     \offinterlineskip
     \topskip=0pt\hbox{}\par
   \endgroup
   \newpage
+  \dte@resumepara
+}
+\def\dte@resume@paragraph{%
+  \ifx\par\dte@skip@par \let\par\dte@resumepar\fi
+  % Keep newpage hook assignments; suppress only the repeated paragraph start.
+  \begingroup
+    \csname tex_everypar:D\endcsname{}%
+    \csname tex_noindent:D\endcsname
+  \endgroup
 }
 
 %% Select a positive natural chunk, retaining leading zero-height material
@@ -2034,7 +2060,7 @@
 }
 \def\dte@retrycolumn{%
   \dte@skipcolumn
-  \par\nobreak\noindent
+  \ifhmode\else\par\nobreak\noindent\fi
   \dte@compute@availht@middle
   \@tempswatrue
 }
