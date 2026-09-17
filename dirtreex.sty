@@ -1855,9 +1855,18 @@
   \ifdim#1>0.3\dte@bls #1=0.3\dte@bls\fi
 }
 
+%% Reuse the measured natural chunk with the current first-split depth.
+\def\dte@set@firstmin#1#2{%
+  \dte@tempdim=#2\relax
+  \ifdim\dte@tempdim>\splitmaxdepth \dte@tempdim=\splitmaxdepth\fi
+  \dte@cap@rowdepth\dte@tempdim
+  \edef\dte@firstminht{\the\dimexpr#1-\dte@tempdim\relax}%
+}
+
 \def\dte@output@breakable{%
   \let\dte@firstfresh\relax
   \let\dte@first@minimum\relax
+  \let\dte@refresh@firstmin\relax
   % Capture outer mode before picture and trial-measurement boxing.
   \let\dte@endbounds\endpgfinterruptboundingbox
   \ifinner\let\dte@endbounds\relax\fi
@@ -1897,11 +1906,10 @@
       \dte@compute@minht
       \let\dte@firstminht\dte@minht
       \ifdte@showbox
-        % A framed split charges only depth beyond its permitted tail.
-        \ifdim\dte@tempdim>\splitmaxdepth \dte@tempdim=\splitmaxdepth\fi
-        \dte@cap@rowdepth\dte@tempdim
-        \edef\dte@minht{\the\dimexpr\dte@minht-\dte@tempdim\relax}%
-        \let\dte@firstminht\dte@minht
+        % Freeze the natural dimensions; paragraph hooks may change the cap.
+        \edef\dte@refresh@firstmin{%
+          \noexpand\dte@set@firstmin{\dte@minht}{\the\dte@tempdim}}%
+        \dte@refresh@firstmin
         % Keep the preliminary threshold; the measured first picture
         % decides whether the taller chunk fits this column.
         \def\dte@minht{2\baselineskip}%
@@ -2059,6 +2067,8 @@
     \ifdim\pagegoal=\maxdimen \let\dte@firstfresh\@empty\fi
     \par\nobreak\noindent
   \fi
+  % Use the depth allowance after the output paragraph's hooks have run.
+  \dte@refresh@firstmin
   \dte@compute@capacity
   % The progress threshold is capped; an actual trial must contain the
   % complete first chunk even when it exceeds the nominal reservation.
