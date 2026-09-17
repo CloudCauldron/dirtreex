@@ -81,6 +81,7 @@
 \newcount\dte@scanidx     % linear entry scan index
 \newcount\dte@probeIdx    % active-line probe index
 \newcount\dte@pagecount   % continuation index (0 during first-piece fitting)
+\newcount\dte@defercount  % consecutive deferrals without committed tree content
 \newcount\dte@breakcount  % number of cross-page breaks detected
 \newcount\dte@piecenum    % 1-based index of the piece currently drawn
 
@@ -1470,6 +1471,7 @@
 %% single unbreakable vbox and TeX would eject it whole to the
 %% next page instead of breaking it.
 \def\dte@output@framed{%
+  \dte@defercount=0\relax
   \ifdte@pagebreak
     \dte@output@breakable
   \else
@@ -1676,8 +1678,24 @@
   \advance\dte@availht by-\dte@leader@dim
 }
 
+%% Count only postponed output; copied split/picture trials are not progress.
+\def\dte@check@defer{%
+  \advance\dte@defercount by 1\relax
+  \ifnum\dte@defercount>19
+    \nonstopmode
+    \PackageError{dirtreex}%
+      {Tree deferral limit reached (20 attempts without progress)}%
+      {Check recurring oversized headers or page-break hooks, and\MessageBreak
+       nonempty para/begin material (struts, colors, or writes).\MessageBreak
+       Reduce the recurring setup so a tree fragment can fit.\MessageBreak
+       Clear pending floats before the tree if they require repeated skips.}%
+    % Stop even without -halt-on-error, using the kernel's fatal-read idiom.
+    \batchmode\read-1 to\reserved@a
+  \fi
+}
 %% Exercise the page builder so newpage also advances an empty float column.
 \def\dte@skipcolumn{%
+  \dte@check@defer
   \let\dte@resumepara\relax
   \ifhmode\ifinner\else\ifnum\lastnodetype=-1
     % Suspend an empty logical paragraph, as in the kernel's para/before
@@ -1837,6 +1855,7 @@
   % useful content, flush to the next page and recompute.
   \ifdim\dte@availht<\dte@minht\relax
     \ifhmode\else
+      \dte@check@defer
       \newpage
       \dte@compute@availht@middle
       \@tempswafalse
@@ -1884,6 +1903,7 @@
     \else
       \ifhmode\else\par\noindent\fi\box\dte@framebox\par
     \fi
+    \dte@defercount=0\relax
   \fi
 }
 
@@ -1939,6 +1959,7 @@
   \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt
     \setbox\dte@framebox=\box\dte@extbox
     \dte@drawpiece{first}%
+    \dte@defercount=0\relax
     \newpage
     \expandafter\dte@dosplit@cont
   \else
@@ -1948,6 +1969,7 @@
       \ifhmode\else\par\noindent\fi
       \box\dte@framebox\par
     \fi
+    \dte@defercount=0\relax
   \fi
 }
 %% Fit an outer first picture before consuming its original rows.
@@ -2050,6 +2072,7 @@
   \else
     \setbox\dte@framebox=\box\dte@extbox
     \box\dte@tbox\par
+    \dte@defercount=0\relax
     \ifx\dte@piecetype\dte@pfirst
       \newpage
       \expandafter\expandafter\expandafter\dte@dosplit@cont
@@ -2343,6 +2366,7 @@
   \else
     \box\dte@tbox\par
   \fi
+  \dte@defercount=0\relax
   \ifx\dte@piecetype\dte@pmiddle
     \newpage
     \expandafter\dte@dosplit@cont
