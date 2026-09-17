@@ -80,7 +80,7 @@
 \newcount\dte@k           % general-purpose third-level counter
 \newcount\dte@scanidx     % linear entry scan index
 \newcount\dte@probeIdx    % active-line probe index
-\newcount\dte@pagecount   % pieces emitted so far in the current tree
+\newcount\dte@pagecount   % continuation index (0 during first-piece fitting)
 \newcount\dte@breakcount  % number of cross-page breaks detected
 \newcount\dte@piecenum    % 1-based index of the piece currently drawn
 
@@ -1887,6 +1887,21 @@
   \fi
   \dte@first@output
 }
+\def\dte@split@to#1{%
+  % Continuation trials are repacked and measured before committing.
+  % Retain overflow reports on first and direct splits; quiet underfulls.
+  \count@=\vbadness
+  \dimen@=\vfuzz
+  % A low vbadness also requests overfull reports within vfuzz.
+  \ifnum\count@<100 \vfuzz=0pt\relax\fi
+  \ifx#1\dte@extbox
+    \ifnum\dte@pagecount>0 \vfuzz=\maxdimen\fi
+  \fi
+  \vbadness=\@M
+  \setbox\dte@splitresult=\vsplit#1 to\dte@availht
+  \vbadness=\count@
+  \vfuzz=\dimen@
+}
 \def\dte@splitfirst#1{%
   % Split the first content from box register #1 using its mode's depth.
   %
@@ -1906,7 +1921,7 @@
   \else
     \splitmaxdepth=0pt\relax
   \fi
-  \setbox\dte@splitresult=\vsplit#1 to\dte@availht
+  \dte@split@to#1%
   \ifdte@showbox \splitmaxdepth=\dte@tempdim\fi
 }
 \def\dte@dosplit@first{%
@@ -2080,7 +2095,7 @@
   \else
     \splitmaxdepth=0pt\relax
   \fi
-  \setbox\dte@splitresult=\vsplit#1 to\dte@availht
+  \dte@split@to#1%
   \splitmaxdepth=\dte@tempdim
 }
 \def\dte@natural@split{%
@@ -2191,7 +2206,7 @@
               \setbox\dte@extbox=\copy\dte@framebox
               \dte@tempdim=\splitmaxdepth
               \splitmaxdepth=0pt\relax
-              \setbox\dte@splitresult=\vsplit\dte@extbox to\dte@availht
+              \dte@split@to\dte@extbox
               \splitmaxdepth=\dte@tempdim
             \fi
             \dte@natural@split
@@ -2249,16 +2264,12 @@
           \setbox\dte@extbox=\copy\dte@framebox
           \dte@splitmiddle\dte@extbox
           \def\dte@piecetype{middle}%
-          % Reconsider a genuinely compressed terminal picture; retain
-          % ordinary depth-only splits and diagnosed oversized rows.
-          \ifnum\badness>\@M\else
-            \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt\else
-              \dte@natural@split
-              \ifdim\dte@compression>0pt
-                \setbox\dte@splitresult=\box\dte@tbox
-                \dte@classify@split
-              \fi
-            \fi
+          % Keep natural connector spacing even when the split target
+          % was overfull; its natural picture may still fit the column.
+          \dte@natural@split
+          \ifdim\dte@compression>0pt
+            \setbox\dte@splitresult=\box\dte@tbox
+            \dte@classify@split
           \fi
           \let\dte@measure@cont\dte@measure@direct
           \dte@measure@cont{\dte@piecetype}%
