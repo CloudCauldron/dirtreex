@@ -237,10 +237,12 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | `dotfill command` | `\dotfill` | TeX code that fills the gap before a comment. Use `\hrulefill` for a solid rule, `\hfill` for a blank gap, or a custom leader with `\hfill` stretch. |
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
 | `line width` | `0.4pt` | Default rule width for all connectors. |
-| `line style` | `solid` | Dash pattern for every connector segment styled by this entry. Accepts any TikZ line-style token — `solid`, `dashed`, `dotted`, `densely dashed`, `loosely dashed`, `densely dotted`, `loosely dotted`, `dash dot`, `dash dot dot`, … — or a full `dash pattern=on Xpt off Ypt` list. `solid` keeps the primitive `\vrule` fast path; any other value routes that segment through TikZ. Propagates to the entry's own elbow, the upper-half of its own-depth pass-through column, and (for the next sibling at each active depth) the lower-half pass-through and full pure-pass-through trunks, plus the matching cross-page extension rules. |
+| `line style` | `solid` | Dash pattern for every connector segment styled by this entry. Accepts any TikZ line-style token — `solid`, `dashed`, `dotted`, `densely dashed`, `loosely dashed`, `densely dotted`, `loosely dotted`, `dash dot`, `dash dot dot`, … — or a comma-separated TikZ option list such as `dash pattern={on 3pt off 2pt},dash phase=1pt`. `solid` keeps the primitive `\vrule` fast path; any other value routes that segment through TikZ. Propagates to the entry's own elbow, the upper-half of its own-depth pass-through column, and (for the next sibling at each active depth) the lower-half pass-through and full pure-pass-through trunks, plus the matching cross-page extension rules. |
 | `elbow radius` | `0pt` | Elbow geometry. `0pt` (the default) gives sharp `└`/`├` right angles; any positive length gives rounded arcs of that radius. Clamped against `0.5\baselineskip` and the horizontal connector arm length for legibility. |
 | `box` | see §6.2 | Frame settings. |
 | `pagebreak` | see §6.3 | Page-break settings. |
+
+Enclose comma-separated `line style` options in braces. A macro may supply the list; conditional selection of key–value lists must finish before returning the selected keys. The stored keys are applied in normal TikZ order; per-entry styles retain capture-time expansion.
 
 The dotfill options apply to all nonempty comments in that environment. The leader's colour and any declarations in its command are local to the leader; names and comments retain their own formatting. Explicit `\\` continuations keep their right alignment, with a leader only before the first line.
 

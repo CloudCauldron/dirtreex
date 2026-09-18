@@ -798,10 +798,8 @@
 %% Resolve the per-entry line-style override for entry #1 into the
 %% local control sequence #2. Falls back to the env-level
 %% \dte@linestyle (default `solid') on undefined / \relax / empty
-%% slots. The resolved token is passed verbatim to TikZ's \draw[...]
-%% options in the non-solid connector path, so any TikZ line-style
-%% key (`dashed', `dotted', `densely dashed', a `dash pattern=...'
-%% list, ...) works without further translation.
+%% slots. The drawing adapter below exposes the stored option list at
+%% use time; resolution itself does not change the schema's binding rules.
 \def\dte@resolve@ls#1#2{%
   \expandafter\let\expandafter#2\csname dte@e#1ls\endcsname
   \ifx#2\relax  \let#2\dte@linestyle \fi
@@ -812,6 +810,23 @@
   \dte@resolve@lw{#1}\dte@cur@lw
   \dte@resolve@ls{#1}\dte@cur@ls
 }
+
+%% Parse a resolved line style as a TikZ option list, not as one key name.
+%% Qualify the adapter at draw sites; keep the current path for its payload.
+%% Expand only the head: values and braced code retain normal PGF timing.
+%% Repeat to pass spaces introduced by aliases; stop when tokens agree.
+%% List-producing conditionals must finish selection before emitting keys.
+\ExplSyntaxOn
+\cs_new_protected:Npn \__dte_line_style_apply:n #1
+  { \exp_args:Nf \__dte_line_style_apply:nn {#1} {#1} }
+\cs_new_protected:Npn \__dte_line_style_apply:nn #1#2
+  {
+    \tl_if_eq:nnTF {#1} {#2}
+      { \pgfkeysalso{#1} }
+      { \__dte_line_style_apply:n {#1} }
+  }
+\tikzset{dte@line~style/.code={\__dte_line_style_apply:n {#1}}}
+\ExplSyntaxOff
 
 %% --------------------------------------------------------------
 %%  \dte@drawvert{raise}{height}{depth}{color}{width}{style}
@@ -824,8 +839,7 @@
 %%
 %%  Two render paths chosen by `style':
 %%    solid (default) -> primitive \vrule (fast).
-%%    any other token -> TikZ \draw with `style' in the option
-%%      list, so dashed / dotted / dash-pattern / etc. all work.
+%%    any other value -> TikZ \draw through the option-list adapter.
 %%
 %%  Used by \dte@draw@passthrough's three rendering sites
 %%  (own-depth upper half, own-depth lower half, pure pass-
@@ -851,7 +865,7 @@
       \raise#1\hbox{%
         \tikz[baseline=0pt]{%
           \useasboundingbox (0pt,-\dte@dv@D) rectangle (0pt,\dte@dv@H);%
-          \draw[#4,line width=#5,line cap=butt,#6]
+          \draw[#4,line width=#5,line cap=butt,/tikz/dte@line style=#6]
             (0pt,-\dte@dv@D) -- (0pt,\dte@dv@H);%
         }%
       }%
@@ -903,10 +917,7 @@
 %%
 %% Two render paths chosen by \dte@cur@ls:
 %%   * solid (default) -> two \vrule calls (fast primitive path).
-%%   * any other token -> TikZ \draw with that token in the option
-%%     list, so the full TikZ line-style vocabulary works
-%%     (`dashed', `dotted', `densely dashed', a `dash pattern=...'
-%%     list, etc.) without further translation here.
+%%   * any other value -> TikZ \draw through the shared style adapter.
 %% The coordinate system in the TikZ branch mirrors
 %% \dte@connector@rounded: x=1pt,y=1pt, origin at the elbow
 %% corner, vertical extends up by \dte@connV, horizontal extends
@@ -941,9 +952,9 @@
         % between the stem and the arm: the corner is always at the
         % start of an "on" segment in both directions, and dash
         % lengths along the stem match dash lengths along the arm.
-        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,\dte@cur@ls]
+        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,/tikz/dte@line style=\dte@cur@ls]
           (0,0) -- (0,\strip@pt\dte@connV);%
-        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,\dte@cur@ls]
+        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,/tikz/dte@line style=\dte@cur@ls]
           (0,0) -- (\strip@pt\dte@width,0);%
       }%
     }%
@@ -984,7 +995,7 @@
   \raise\dte@connR\hbox{%
     \tikz[x=1pt,y=1pt,baseline=0pt]{%
       \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
-      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,\dte@cur@ls]
+      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,/tikz/dte@line style=\dte@cur@ls]
         (0,\strip@pt\dte@connV) -- (0,\strip@pt\dte@connE)
         arc[start angle=180,end angle=270,radius=\strip@pt\dte@connE]
         -- (\strip@pt\dte@width,0);%
@@ -2726,7 +2737,7 @@
           \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
           \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
-          \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
+          \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
             ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
             ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
         }%
@@ -2745,7 +2756,7 @@
             \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
             \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
-            \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
+            \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
               ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
               ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
           \fi
@@ -2790,7 +2801,7 @@
           \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
           \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
-          \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
+          \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
             ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
             ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
         }%
@@ -2813,7 +2824,7 @@
             \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
             \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
-            \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
+            \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
               ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
               ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
           \fi
