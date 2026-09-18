@@ -422,19 +422,27 @@
   \endgroup
 }
 
+%% Shared post-scan capture: #1 diagnostic command, #2 options,
+%% #3 name, #4 comment, #5 numeric type. Pass scanned tokens unchanged.
+%% Keep the diagnostic's existing continuation and storage/binding order;
+%% container wrappers enter their streamed child groups afterwards.
+\def\dte@capture@entry#1#2#3#4#5{%
+  \ifdte@inenv\else
+    \PackageError{dirtreex}%
+      {\string#1\space used outside dirtreex environment}%
+      {Every \string#1\space must appear inside the body of a
+       dirtreex environment.}%
+  \fi
+  \global\advance\dte@cnt by 1\relax
+  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#3}{#4}{#5}%
+  \dte@store@entry@opts{#2}{\the\dte@cnt}%
+}
+
 %% ============================================================
 %%  \dir / \file  (public API, with optional per-entry style)
 %% ============================================================
 \NewDocumentCommand{\dir}{O{} m m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\dir\space used outside dirtreex environment}%
-      {Every \string\dir\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{1}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\dir{#1}{#2}{#3}{1}%
   \dte@kids
 }
 
@@ -500,15 +508,7 @@
 }
 
 \NewDocumentCommand{\file}{O{} m m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\file\space used outside dirtreex environment}%
-      {Every \string\file\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{0}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\file{#1}{#2}{#3}{0}%
 }
 
 %% ------------------------------------------------------------
@@ -521,15 +521,7 @@
 %%  to attach archive-specific icons or colours; the package
 %%  ships no built-in archive styling.
 \NewDocumentCommand{\archive}{O{} m m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\archive\space used outside dirtreex environment}%
-      {Every \string\archive\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{2}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\archive{#1}{#2}{#3}{2}%
   \dte@kids
 }
 
@@ -548,40 +540,16 @@
 %% another macro. Nested verbatim entries work because \dte@kids opens
 %% a live TeX group instead of collecting the children as an argument.
 \NewDocumentCommand{\verbdir}{O{} v m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\verbdir\space used outside dirtreex environment}%
-      {Every \string\verbdir\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{1}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\verbdir{#1}{#2}{#3}{1}%
   \dte@kids
 }
 
 \NewDocumentCommand{\verbfile}{O{} v m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\verbfile\space used outside dirtreex environment}%
-      {Every \string\verbfile\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{0}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\verbfile{#1}{#2}{#3}{0}%
 }
 
 \NewDocumentCommand{\verbarchive}{O{} v m}{%
-  \ifdte@inenv\else
-    \PackageError{dirtreex}%
-      {\string\verbarchive\space used outside dirtreex environment}%
-      {Every \string\verbarchive\space must appear inside the body of a
-       dirtreex environment.}%
-  \fi
-  \global\advance\dte@cnt by 1\relax
-  \dte@estore{\the\dte@cnt}{\the\dte@depth}{#2}{#3}{2}%
-  \dte@store@entry@opts{#1}{\the\dte@cnt}%
+  \dte@capture@entry\verbarchive{#1}{#2}{#3}{2}%
   \dte@kids
 }
 
@@ -887,6 +855,20 @@
 \newdimen\dte@connR   % raise above baseline (0.2\baselineskip)
 \newdimen\dte@connE   % effective elbow radius after clamping
 
+%% Resolve entry #1's radius into dimen #3, using caller macro #2.
+%% Keep #2's stored meaning; missing/relax/empty inherit \dte@elbowR.
+%% Dimension values are read here; geometry caps remain in the callers.
+\def\dte@resolve@elbow#1#2#3{%
+  \expandafter\let\expandafter#2\csname dte@e#1er\endcsname
+  \ifx#2\relax
+    #3=\dte@elbowR
+  \else\ifx#2\@empty
+    #3=\dte@elbowR
+  \else
+    #3=#2\relax
+  \fi\fi
+}
+
 \def\dte@draw@connector#1{%
   % #1 = entry index. The caller has already stored the desired
   % vertical height in \dte@scratch; copy it into a dedicated
@@ -895,19 +877,8 @@
   \dte@connV=\dte@scratch\relax
   \dte@connR=0.2\baselineskip\relax
   %
-  % Retrieve the per-entry elbow-radius override. Three branches:
-  %   \relax  -> slot undefined (e-TeX semantics for unset \csname)
-  %              fall through to the env-level \dte@elbowR.
-  %   \@empty -> slot defined but empty; same default.
-  %   else    -> use the stored override.
-  \expandafter\let\expandafter\dte@cur@er\csname dte@e#1er\endcsname
-  \ifx\dte@cur@er\relax
-    \dte@connE=\dte@elbowR
-  \else\ifx\dte@cur@er\@empty
-    \dte@connE=\dte@elbowR
-  \else
-    \dte@connE=\dte@cur@er\relax
-  \fi\fi
+  % Resolve the override before choosing the connector's drawing path.
+  \dte@resolve@elbow{#1}\dte@cur@er\dte@connE
   %
   \ifdim\dte@connE>0pt\relax
     \dte@connector@rounded
@@ -1062,19 +1033,9 @@
   \edef\dte@save@tempdim{\the\dte@tempdim}%
   \edef\dte@actlist{\dte@safeget{dte@e#1a}}%
   \edef\dte@ownd{\dte@eget{#1}{d}}%
-  % Resolve the entry's effective elbow radius. This mirrors the
-  % clamping in \dte@connector@rounded so the passthrough's
-  % colour split aligns with the actual arc top drawn later:
-  % connE is bounded by connV (0.2 bls when splitflag is true,
-  % 0.5 bls otherwise) and by 0.5 bls.
-  \expandafter\let\expandafter\dte@pt@er\csname dte@e#1er\endcsname
-  \ifx\dte@pt@er\relax
-    \dte@ptE=\dte@elbowR
-  \else\ifx\dte@pt@er\@empty
-    \dte@ptE=\dte@elbowR
-  \else
-    \dte@ptE=\dte@pt@er\relax
-  \fi\fi
+  % Apply the common width/baseline caps for the pass-through colour split.
+  % The connector additionally caps its radius by its own stem.
+  \dte@resolve@elbow{#1}\dte@pt@er\dte@ptE
   \dte@clampelbow\dte@ptE
   \@for\dte@alvl:=\dte@actlist\do{%
     % \dte@actlist is built without a leading comma (see
@@ -1270,6 +1231,16 @@
   \let\strut\dte@sav@strut
 }
 
+%% Renormalise the prepared row box in place, preserving its total extent.
+%% Leave the new depth in \dte@scratch; callers own the box and its placement.
+\def\dte@normalize@rowbox{%
+  \dte@scratch=\ht\dte@tbox
+  \advance\dte@scratch by\dp\dte@tbox
+  \advance\dte@scratch by-0.7\baselineskip
+  \ht\dte@tbox=0.7\baselineskip
+  \dp\dte@tbox=\dte@scratch
+}
+
 %% Root entry: rendered without connectors (nothing above it).
 %% The outer vbox makes height normalisation reposition the
 %% contents from the top, so multiline comments grow downward.
@@ -1286,11 +1257,7 @@
       }%
     }%
   }%
-  \dte@scratch=\ht\dte@tbox
-  \advance\dte@scratch by\dp\dte@tbox
-  \advance\dte@scratch by-0.7\baselineskip
-  \ht\dte@tbox=0.7\baselineskip
-  \dp\dte@tbox=\dte@scratch
+  \dte@normalize@rowbox
   \par\leavevmode
   \dte@markcolumn{1}%
   \box\dte@tbox
@@ -1353,11 +1320,7 @@
   % Renormalise the entry's box height/depth: height is pinned
   % to 0.7 bls, any excess becomes depth (so multi-line comments
   % simply grow downward in the depth field).
-  \dte@scratch=\ht\dte@tbox
-  \advance\dte@scratch by\dp\dte@tbox
-  \advance\dte@scratch by-0.7\baselineskip
-  \ht\dte@tbox=0.7\baselineskip
-  \dp\dte@tbox=\dte@scratch
+  \dte@normalize@rowbox
   %
   % Cumulative vertical position, used later to compute the
   % connector length (distance from this entry back to its
@@ -1521,6 +1484,20 @@
   \fi
 }
 
+%% Expandable closed whole-frame contour, evaluated in each current path.
+%% Callers retain their paint options, layer and terminating semicolon.
+\def\dte@wholeframe@path{%
+  ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
+  [rounded corners=\dte@cTL]
+  -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
+  [rounded corners=\dte@cTR]
+  -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
+  [rounded corners=\dte@cBR]
+  -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
+  [rounded corners=\dte@cBL]
+  -- cycle%
+}
+
 %% Output in H/V mode: start a paragraph if needed, consume framebox in
 %% a framed TikZ node, then end the paragraph. Picture/box hooks may run.
 %% Both painters reserve dte@content: PGF stores named-node data globally.
@@ -1533,26 +1510,10 @@
          ] (dte@content) {\box\dte@framebox};
     \begin{scope}[on background layer]
     \fill[\dte@bgcolor]
-        ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
-        [rounded corners=\dte@cTL]
-        -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
-        [rounded corners=\dte@cTR]
-        -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
-        [rounded corners=\dte@cBR]
-        -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
-        [rounded corners=\dte@cBL]
-        -- cycle;
+      \dte@wholeframe@path;
     \end{scope}
     \draw[\dte@bordercolor,line width=\dte@borderwidth]
-        ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
-        [rounded corners=\dte@cTL]
-        -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
-        [rounded corners=\dte@cTR]
-        -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
-        [rounded corners=\dte@cBR]
-        -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
-        [rounded corners=\dte@cBL]
-        -- cycle;
+      \dte@wholeframe@path;
   \end{tikzpicture}\par
 }
 
@@ -2639,6 +2600,8 @@
       \path ([yshift=\dte@tbB]dte@content.north west);
     \fi
     %
+    % Split fills close areas across torn edges that their borders omit;
+    % the last-piece fill and border also traverse the corners differently.
     % --- Background fill + border (shape depends on piece type) ---
     % Skipped when box=false: the bare tree has no frame to draw,
     % only the tree-extension vrules below still apply.
