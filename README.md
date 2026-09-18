@@ -46,7 +46,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 | `xcolor` | Both `color!mix!color` and `HTML` colour models are accepted. |
 | `pgfkeys` | Option parsing. |
 | `zref-abspage` | Cross-page anchoring. |
-| `xparse` (auto-loaded by LaTeX2e) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile` / `\verbarchive`. |
+| Document commands (LaTeX kernel) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile` / `\verbarchive`. |
 
 No `-shell-escape`, no external tools, no Python helper.
 
@@ -183,7 +183,9 @@ Swap the bracketed tags for icons from your icon package of choice (`\faFolder`,
 
 Each verbatim variant pairs with the same-shape regular command: `\verbdir` mirrors `\dir` (children block, trailing `/`), `\verbfile` mirrors `\file` (no children), and `\verbarchive` mirrors `\archive` (children block, no trailing `/`).
 
-The path is read with xparse's `v` (verbatim) specifier: the first non-letter, non-space character after the macro name is the opening delimiter, the matching delimiter closes the path, and every byte in between is captured at catcode 12 ("other"). Comment and children retain full LaTeX catcodes — you can still write `$x^2$`, `\textbf{...}`, `\\` inside the comment, and nested `\dir` / `\file` / `\archive` / `\verbdir` / `\verbfile` / `\verbarchive` inside the children block work normally.
+The path uses the LaTeX kernel's `v` (verbatim) argument type. It accepts two matching delimiters other than `%`, `\`, `#`, braces or a space, or a braced form such as `\verbfile{path.txt}{comment}`. ASCII letters retain their category; the usual special characters become literal characters, while spaces and tabs remain active tokens. Non-ASCII character categories depend on the engine: active in 8-bit engines, letter or other in Unicode engines.
+
+Comment and children retain full LaTeX catcodes — you can still write `$x^2$`, `\textbf{...}` and `\\` inside the comment, and nested `\dir` / `\file` / `\archive` / `\verbdir` / `\verbfile` / `\verbarchive` inside the children block work normally.
 
 ### 5.1 Example
 
@@ -206,9 +208,9 @@ The path is read with xparse's `v` (verbatim) specifier: the first non-letter, n
   \verbfile/a|b+c/{...}      % / as delimiter, | and + survive
   ```
 
-  **Delimiter collisions corrupt SILENTLY.** Writing `\verbfile|foo|bar|{c}` makes xparse take `|foo|` as the name and `b` as the comment, leaving `ar|{c}` as stray tokens — no error fires. Pick a delimiter that does not appear in any of your paths.
+  **Delimiter collisions corrupt SILENTLY.** Writing `\verbfile|foo|bar|{c}` makes the verbatim scanner take `|foo|` as the name and `b` as the comment, leaving `ar|{c}` as stray tokens — no error fires. Pick a delimiter that does not appear in any of your paths.
 
-- **The verbatim argument must be readable directly from source.** If you wrap `\verbfile|...|` inside another macro that captures its argument as a token list (e.g., a user-side `\newcommand` that takes `+m`), the path is tokenised at the wrapper's call site — before `\verbfile` can re-catcode it — and the verbatim semantics are lost. The children block of `\dir` and `\verbdir` does **not** suffer from this: it is a live TeX group, not a captured token list, so `\verbfile|...|` written inside `\dir{...}{...}{ ... }` works as expected.
+- **The verbatim argument must be readable directly from source.** If you wrap `\verbfile|...|` inside another macro that captures its argument as a token list (e.g., a user-side `\NewDocumentCommand` with an `m` or `+m` argument), the path is tokenised at the wrapper's call site — before `\verbfile` can re-catcode it — and the verbatim semantics are lost. The children block of `\dir` and `\verbdir` does **not** suffer from this: it is a live TeX group, not a captured token list, so `\verbfile|...|` written inside `\dir{...}{...}{ ... }` works as expected.
 
 - **Encoding.** Under T1 / TU encoding (LuaLaTeX default, or pdfLaTeX with `\usepackage[T1]{fontenc}`), every cat-12 character renders as its literal glyph in monospace. If you target legacy OT1 encoding, the special characters `_` and `&` may require explicit `\char` mapping — pick an encoding that supports them.
 
@@ -236,7 +238,7 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
 | `line width` | `0.4pt` | Default rule width for all connectors. |
 | `line style` | `solid` | Dash pattern for every connector segment styled by this entry. Accepts any TikZ line-style token — `solid`, `dashed`, `dotted`, `densely dashed`, `loosely dashed`, `densely dotted`, `loosely dotted`, `dash dot`, `dash dot dot`, … — or a full `dash pattern=on Xpt off Ypt` list. `solid` keeps the primitive `\vrule` fast path; any other value routes that segment through TikZ. Propagates to the entry's own elbow, the upper-half of its own-depth pass-through column, and (for the next sibling at each active depth) the lower-half pass-through and full pure-pass-through trunks, plus the matching cross-page extension rules. |
-| `elbow radius` | `0pt` | Elbow geometry. `0pt` (the default) gives sharp `└`/`├` right angles; any positive length gives rounded arcs of that radius. Clamped against `0.5\baselineskip` and against `line width` for legibility. |
+| `elbow radius` | `0pt` | Elbow geometry. `0pt` (the default) gives sharp `└`/`├` right angles; any positive length gives rounded arcs of that radius. Clamped against `0.5\baselineskip` and the horizontal connector arm length for legibility. |
 | `box` | see §6.2 | Frame settings. |
 | `pagebreak` | see §6.3 | Page-break settings. |
 
