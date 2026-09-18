@@ -1507,32 +1507,34 @@
 
 %% Output in H/V mode: start a paragraph if needed, consume framebox in
 %% a framed TikZ node, then end the paragraph. Picture/box hooks may run.
+%% Both painters reserve dte@content: PGF stores named-node data globally.
+%% Keep inherited name prefix/suffix on its definition and references.
 \def\dte@output@singleframe{%
   \ifhmode\else\par\noindent\fi
   \begin{tikzpicture}
     \node[inner sep=0pt,outer sep=0pt,
           anchor=north west,
-         ] (C) {\box\dte@framebox};
+         ] (dte@content) {\box\dte@framebox};
     \begin{scope}[on background layer]
     \fill[\dte@bgcolor]
-        ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+        ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
         [rounded corners=\dte@cTL]
-        -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+        -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
         [rounded corners=\dte@cTR]
-        -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+        -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
         [rounded corners=\dte@cBR]
-        -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+        -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
         [rounded corners=\dte@cBL]
         -- cycle;
     \end{scope}
     \draw[\dte@bordercolor,line width=\dte@borderwidth]
-        ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+        ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
         [rounded corners=\dte@cTL]
-        -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+        -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
         [rounded corners=\dte@cTR]
-        -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+        -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
         [rounded corners=\dte@cBR]
-        -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+        -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
         [rounded corners=\dte@cBL]
         -- cycle;
   \end{tikzpicture}\par
@@ -1581,7 +1583,7 @@
 %%       `bls - prev_dp - new_ht' is large-negative (since
 %%       new_ht=avail >> bls), so TeX falls back to \lineskip glue.
 %%       That \lineskip pushes the picture - and therefore the
-%%       bar's bottom (which sits at C.south = picture baseline) -
+%%       bar's bottom (which sits at dte@content.south = picture baseline) -
 %%       one \lineskip below the configured `tree break at' line.
 %%   (c) \pagedepth for an outer split - \pagetotal excludes the last
 %%       box's depth, which the next paragraph's glue adds to the
@@ -2564,16 +2566,16 @@
   % new page (they immediately follow \newpage in
   % \dte@dosplit@cont). TeX places that first hbox so its
   % baseline lands at max(\topskip, \ht{hbox}) below page top.
-  % We want C.north -- which is the picture's baseline -- to land
+  % We want dte@content.north -- which is the picture's baseline -- to land
   % at exactly \dte@tbB below page top, so the tree first row sits
   % at the configured `tree break at` distance and the frame
-  % torn-top (drawn at C.north + (tbB-bbB) above C.north) lands
+  % torn-top (drawn at dte@content.north + (tbB-bbB) above dte@content.north) lands
   % at the configured `box break at` distance. Force the policy
   % by zeroing \topskip locally and extending the picture's
   % bounding box upward to include a point at yshift=\dte@tbB
-  % above C.north (added inside the tikzpicture below). Without
+  % above dte@content.north (added inside the tikzpicture below). Without
   % this, the picture's natural ht is only (tbB-bbB) -- just the
-  % frame's protrusion above C.north -- and the whole continuation
+  % frame's protrusion above dte@content.north -- and the whole continuation
   % drifts upward by exactly bbB.
   \ifx\dte@piecetype\dte@pfirst\else
     \topskip=0pt\relax
@@ -2584,7 +2586,7 @@
   % node in \dte@framebox (tree ends exactly at the first piece's
   % bottom), the remainder becomes a void box -- and TeX silently
   % ignores \wd/\ht/\dp assignments on void boxes. Without this
-  % guard C's bounding box would collapse to 0pt and leave the
+  % guard dte@content's bounding box would collapse to 0pt and leave the
   % closing border a sliver of width padL+padR on the trailing
   % page. Replacing void with an empty non-void \hbox makes the
   % subsequent \wd assignment stick; the assignment is a no-op
@@ -2594,13 +2596,13 @@
   \fi
   \wd\dte@splitresult=\dte@contentwd\relax
   \begin{tikzpicture}
-    % Content node. inner sep=0 pins C's edges to the content's
+    % Content node. inner sep=0 pins dte@content's edges to the content's
     % edges. For piece 2+ we prepend \dte@leader@dim worth of
     % blank space above the content so the first entry's
     % connector has room for a `│` leading down from the top.
     \node[inner sep=0pt,outer sep=0pt,
           anchor=north west,
-         ] (C) {%
+         ] (dte@content) {%
       \ifx\dte@piecetype\dte@pfirst
         \box\dte@splitresult
       \else
@@ -2609,16 +2611,16 @@
     };
     %
     % Continuation pieces: stamp a single invisible coordinate
-    % at yshift=\dte@tbB above C.north_west so the picture's
+    % at yshift=\dte@tbB above dte@content.north_west so the picture's
     % natural \ht reaches \dte@tbB. Together with \topskip=0pt
     % (set just before the tikzpicture in \dte@drawpiece) this
-    % anchors C.north exactly \dte@tbB below the new page's top
+    % anchors dte@content.north exactly \dte@tbB below the new page's top
     % edge -- which puts the tree first row at the configured
     % `tree break at' distance and the frame torn-top at the
     % configured `box break at' distance. See the lengthy
     % comment in \dte@drawpiece above the \topskip assignment.
     \ifx\dte@piecetype\dte@pfirst\else
-      \path ([yshift=\dte@tbB]C.north west);
+      \path ([yshift=\dte@tbB]dte@content.north west);
     \fi
     %
     % --- Background fill + border (shape depends on piece type) ---
@@ -2629,59 +2631,59 @@
       % First piece: closed top (rounded TL/TR), open bottom at +bbA.
       \begin{scope}[on background layer]
       \fill[\dte@bgcolor]
-          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west)
+          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south west)
           [rounded corners=\dte@cTL]
-          -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+          -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
           [rounded corners=\dte@cTR]
-          -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+          -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
           [sharp corners]
-          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east)
+          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south east)
           -- cycle;
       \end{scope}
       \draw[\dte@bordercolor,line width=\dte@borderwidth]
-          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west)
+          ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south west)
           [rounded corners=\dte@cTL]
-          -- ([xshift=-\dte@padL,yshift=\dte@padT]C.north west)
+          -- ([xshift=-\dte@padL,yshift=\dte@padT]dte@content.north west)
           [rounded corners=\dte@cTR]
-          -- ([xshift=\dte@padR,yshift=\dte@padT]C.north east)
+          -- ([xshift=\dte@padR,yshift=\dte@padT]dte@content.north east)
           [sharp corners]
-          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+          -- ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south east);
     \else\ifx\dte@piecetype\dte@plast
       % Last piece: open top at -bbB, closed bottom (rounded BL/BR).
       \begin{scope}[on background layer]
       \fill[\dte@bgcolor]
-          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
-          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east)
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north west)
+          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north east)
           [rounded corners=\dte@cBR]
-          -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+          -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
           [rounded corners=\dte@cBL]
-          -- ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+          -- ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
           [sharp corners]
           -- cycle;
       \end{scope}
       \draw[\dte@bordercolor,line width=\dte@borderwidth]
-          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north west)
           [rounded corners=\dte@cBL]
-          -- ([xshift=-\dte@padL,yshift=-\dte@padB]C.south west)
+          -- ([xshift=-\dte@padL,yshift=-\dte@padB]dte@content.south west)
           [rounded corners=\dte@cBR]
-          -- ([xshift=\dte@padR,yshift=-\dte@padB]C.south east)
+          -- ([xshift=\dte@padR,yshift=-\dte@padB]dte@content.south east)
           [sharp corners]
-          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east);
+          -- ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north east);
     \else
       % Middle piece: both sides open; fill a plain rectangle
       % and draw only the two vertical borders.
       \begin{scope}[on background layer]
       \fill[\dte@bgcolor]
-          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)
+          ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north west)
           rectangle
-          ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+          ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south east);
       \end{scope}
       \draw[\dte@bordercolor,line width=\dte@borderwidth]
-        ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north west)--
-        ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south west);
+        ([xshift=-\dte@padL,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north west)--
+        ([xshift=-\dte@padL,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south west);
       \draw[\dte@bordercolor,line width=\dte@borderwidth]
-        ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]C.north east)--
-        ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]C.south east);
+        ([xshift=\dte@padR,yshift=-\dimexpr\dte@bbB-\dte@tbB\relax]dte@content.north east)--
+        ([xshift=\dte@padR,yshift=\dimexpr\dte@bbA-\dte@tbA\relax]dte@content.south east);
     \fi\fi
     \fi
     %
@@ -2725,8 +2727,8 @@
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
           \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
           \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
-            ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
-            ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
+            ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
+            ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
         }%
         % Feed-first-child column. When the break falls between
         % a directory and its first child, that child's column
@@ -2744,8 +2746,8 @@
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
             \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
             \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
-              ([xshift=\dte@tempdim,yshift=0pt]C.north west)--
-              ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]C.north west);
+              ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
+              ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
           \fi
         \fi
       \fi
@@ -2759,7 +2761,7 @@
     % to cover. Add one row height and, for continuations, the leader.
     % Anchor from north: \vsplit assigns the target box height, which
     % can exceed the natural content extent without adding a padding kern.
-    % C.south then reflects that assigned extent, not the last-row baseline.
+    % dte@content.south then reflects that assigned extent, not the last-row baseline.
     \ifx\dte@piecetype\dte@plast\else
       \expandafter\ifx
         \csname dte@breaklines@\the\dte@piecenum\endcsname
@@ -2789,8 +2791,8 @@
           \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
           \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
           \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
-            ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
-            ([xshift=\dte@tempdim,yshift=0pt]C.south west);
+            ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
+            ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
         }%
         % Feed-first-child column (bottom extension). Symmetric
         % to the top-extension helper above: if the last entry
@@ -2812,8 +2814,8 @@
             \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
             \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
             \draw[\dte@ext@lc,line width=\dte@ext@lw,\dte@ext@ls]
-              ([xshift=\dte@tempdim,yshift=\dte@extTopY]C.north west)--
-              ([xshift=\dte@tempdim,yshift=0pt]C.south west);
+              ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
+              ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
           \fi
         \fi
       \fi
