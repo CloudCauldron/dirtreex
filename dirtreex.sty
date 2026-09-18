@@ -362,7 +362,8 @@
 %%        inherit rulewidth/elbowR. Private; dimensions are read at use.
 %% l      Last-child integer flag (1=yes, 0=no), preprocessing \xdef; private.
 %% a      Ascending comma-separated active positive depths, preprocessing
-%%        \xdef; empty means none. May include the entry's own depth.
+%%        \xdef; empty means none. Unique and bounded by the entry's depth.
+%%        Its own positive depth is included when a later sibling exists.
 %%
 %% All fields are populated by capture or preprocessing before rendering.
 %% d/t/n/c/i/l require their producer; no missing-slot fallback is supplied.
@@ -382,10 +383,12 @@
 %% dte@pos@N: dimension literal, render-time global \xdef; natural row
 %%   coordinate used for connector differences, not a shipout position.
 %%   Cleared with the fields; must be produced before geometric use.
-%% dte@breaklines@B / dte@breakidx@B: depth list / last-entry integer at
-%%   1-based break B, environment-local \edef using current topology and
-%%   prior-run page/column boundaries. Built before rows; missing records
-%%   skip extensions. List composition belongs to \dte@store@breaklines.
+%% dte@breaklines@B / dte@breakidx@B: unique ascending boundary depths /
+%%   last-entry integer at 1-based break B, environment-local \edef using
+%%   current topology and prior-run page/column boundaries. The list includes
+%%   a first-child feed on descent and preserves the legacy depth-zero
+%%   fallback; see \dte@store@breaklines. Built before rows; missing records
+%%   skip extensions.
 %% Location labels dte<tnum>.<N> persist in the aux file: zref abspage,
 %%   plus PGF horizontal origin in outer two-column mode. The lookup uses
 %%   page 0 when absent and requests a rerun for missing page/column data.
@@ -631,6 +634,8 @@
 %%  as a comma-separated list in \dte@e<N>a. Stored without a
 %%  leading comma so every downstream \@for iteration sees a
 %%  real element (no empty first iteration to guard against).
+%%  Probing each depth in 1..current depth once makes this an
+%%  ascending set; a deeper first-child column is not in it.
 \def\dte@computeactive{%
   \dte@i=1\relax
   \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
@@ -2707,11 +2712,11 @@
     %
     % --- Top extension vrules (middle and last pieces) ---
     %
-    % Each active-depth column inherited from the previous piece
+    % Each column in the shared boundary list
     % has to continue visually from the top of this piece down
     % into row 1 so the `│` appears unbroken across the page
-    % break. We draw from yshift=-tbB (just below the top of
-    % the content) down through the leader space and 0.3 bls
+    % break. We draw from the content node's north edge down
+    % through the leader space and 0.3 bls
     % into row 1, where the row's own passthrough / elbow takes
     % over. With leader=0.5 bls the combined extension + row-1
     % passthrough produces a `│` of one baselineskip above the
@@ -2720,8 +2725,8 @@
     %
     % Colour convention matches \dte@draw@passthrough: each
     % column uses the colour of the next entry at that depth
-    % after the break point (the entry whose elbow the line
-    % leads into).
+    % after the break point, either a continuing sibling or the
+    % first child whose feed was added by \dte@store@breaklines.
     \ifx\dte@piecetype\dte@pfirst\else
       \expandafter\ifx
         \csname dte@breaklines@\the\numexpr\dte@piecenum-1\relax\endcsname
@@ -2741,26 +2746,6 @@
             ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
             ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
         }%
-        % Feed-first-child column. When the break falls between
-        % a directory and its first child, that child's column
-        % is absent from the previous piece's active-depth list
-        % (no future sibling exists yet). Draw one extra
-        % extension vrule at the first-child's depth in the
-        % first-child's colour so the top `└` / `├` on this
-        % piece still has a `│` leading down into it.
-        \dte@scratchcnt=\numexpr\dte@bkidx+1\relax
-        \ifnum\dte@scratchcnt>\dte@cnt\else
-          \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
-          \ifnum\dte@firstd>0\relax
-            \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
-            \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
-            \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
-            \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
-            \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
-              ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
-              ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
-          \fi
-        \fi
       \fi
     \fi
     %
@@ -2805,30 +2790,6 @@
             ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
             ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
         }%
-        % Feed-first-child column (bottom extension). Symmetric
-        % to the top-extension helper above: if the last entry
-        % on this piece is a directory whose first child sits on
-        % the NEXT piece, that child's depth is strictly deeper
-        % than the last entry's depth and so is absent from both
-        % the active-depth list and the own-depth fallback.
-        % Draw one extra vrule at the first-child's depth in the
-        % first-child's colour so the matching top extension on
-        % the next piece meets it cleanly.
-        \dte@scratchcnt=\dte@bkidx\relax
-        \edef\dte@lastd{\dte@eget{\number\dte@scratchcnt}{d}}%
-        \advance\dte@scratchcnt by 1\relax
-        \ifnum\dte@scratchcnt>\dte@cnt\else
-          \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
-          \ifnum\dte@firstd>\dte@lastd\relax
-            \dte@tempdim=\dimexpr\numexpr\dte@firstd-1\relax\dte@all+\dte@offset\relax
-            \dte@resolve@lc{\number\dte@scratchcnt}\dte@ext@lc
-            \dte@resolve@lw{\number\dte@scratchcnt}\dte@ext@lw
-            \dte@resolve@ls{\number\dte@scratchcnt}\dte@ext@ls
-            \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
-              ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
-              ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
-          \fi
-        \fi
       \fi
     \fi
     \dte@endbounds
@@ -2840,8 +2801,8 @@
 %%  Page/column break data (precomputed from recorded locations)
 %% ============================================================
 %% Scan the entry list for adjacent pairs that resolve to
-%% different pages or columns and record, per break, the active-
-%% depth list and the last-entry index on the piece that ends
+%% different pages or columns and record, per break, the boundary-
+%% column list and the last-entry index on the piece that ends
 %% at that break. Consumed by \dte@drawpiece to emit the
 %% extension vrules and to place the bottom extension's top
 %% anchor.
@@ -2869,18 +2830,27 @@
   % #1 = index of the last entry in the previous column/piece.
   % #2 = 1-based break number.
   %
-  % Start from the active-depth list of the last entry, and
-  % append the entry's own depth if it is a last-child directory
-  % (its own column still needs an extension into the next
-  % piece). Guards against a leading comma the same way
-  % \dte@ca@probe@loop does, so the consumer \@for loops never
-  % see an empty first iteration.
+  % Positive continuing columns are already unique, including the
+  % entry's own depth when it has a later sibling. Preserve only
+  % the non-redundant depth-zero fallback for later top-level entries.
   \edef\dte@bklist{\dte@safeget{dte@e#1a}}%
-  \ifnum\dte@eget{#1}{l}=0\relax
-    \ifx\dte@bklist\@empty
-      \edef\dte@bklist{\dte@eget{#1}{d}}%
-    \else
-      \edef\dte@bklist{\dte@bklist,\dte@eget{#1}{d}}%
+  \ifnum\dte@eget{#1}{d}=0\relax
+    \ifnum\dte@eget{#1}{l}=0\relax
+      \def\dte@bklist{0}%
+    \fi
+  \fi
+  % On descent the immediate child's depth exceeds every active
+  % depth. Append it once; both painters then use the same list.
+  % The next-entry lookup at this depth returns that first child.
+  \dte@scratchcnt=\numexpr#1+1\relax
+  \ifnum\dte@scratchcnt>\dte@cnt\else
+    \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
+    \ifnum\dte@firstd>\dte@eget{#1}{d}\relax
+      \ifx\dte@bklist\@empty
+        \let\dte@bklist\dte@firstd
+      \else
+        \edef\dte@bklist{\dte@bklist,\dte@firstd}%
+      \fi
     \fi
   \fi
   \expandafter\edef\csname dte@breaklines@#2\endcsname{\dte@bklist}%
