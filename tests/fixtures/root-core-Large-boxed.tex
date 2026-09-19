@@ -1,0 +1,97 @@
+\documentclass[11pt,oneside]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=160mm,paperheight=180mm,margin=16mm]{geometry}
+\usepackage{dirtreex}
+
+\usepackage{zref-savepos,etoolbox}
+\newcommand{\RGmark}[1]{\zsavepos{rg-\RGcase-#1}}
+\makeatletter
+\let\RGname\DirtreexFormatName
+\renewcommand{\DirtreexFormatName}[1]{\RGmark{n#1}\RGname{#1}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \typeout{RG-RAW|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \dte@normalize@rowbox}{}{\errmessage{Cannot probe root dimensions}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \dte@normalize@rowbox
+  \typeout{RG-NORM|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \typeout{RG-BLS|\RGcase|\number\dte@bls}%
+}{}{\errmessage{Cannot probe normalized dimensions}}
+\let\RGoutput\dte@output@framed
+\def\dte@output@framed{%
+  \typeout{RG-FRAME|\RGcase|\number\ht\dte@framebox|\number\dp\dte@framebox|\number\wd\dte@framebox}%
+  \RGoutput}
+\let\RGconnector\dte@draw@connector
+\def\dte@draw@connector#1{%
+  \typeout{RG-CONN|\RGcase|#1|\number\dte@scratch}%
+  \RGconnector{#1}}
+\makeatother
+\pagestyle{empty}
+
+
+\begin{document}
+\begingroup\def\RGcase{1}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\Large,box={border color=red},line color=blue]
+\dir{ROOT}{}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{2}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\Large,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Comment01\RGmark{e1}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{3}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\Large,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Comment01\RGmark{e1}\\\RGmark{c2}Comment02\RGmark{e2}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{4}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\Large,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Comment01\RGmark{e1}\\\RGmark{c2}Comment02\RGmark{e2}\\\RGmark{c3}Comment03\RGmark{e3}\\\RGmark{c4}Comment04\RGmark{e4}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{5}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\Large,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Rootword01 \RGmark{c2}Rootword02 \RGmark{c3}Rootword03 \RGmark{c4}Rootword04 \RGmark{c5}Rootword05 \RGmark{c6}Rootword06 \RGmark{c7}Rootword07 \RGmark{c8}Rootword08 \RGmark{c9}Rootword09 \RGmark{c10}Rootword10 \RGmark{c11}Rootword11 \RGmark{c12}Rootword12 \RGmark{c13}Rootword13 \RGmark{c14}Rootword14 \RGmark{c15}Rootword15 \RGmark{c16}Rootword16 \RGmark{c17}Rootword17 \RGmark{c18}Rootword18 \RGmark{c19}Rootword19 \RGmark{c20}Rootword20 \RGmark{c21}Rootword21 \RGmark{c22}Rootword22 \RGmark{c23}Rootword23 \RGmark{c24}Rootword24 \RGmark{c25}Rootword25 \RGmark{c26}Rootword26 \RGmark{c27}Rootword27 \RGmark{c28}Rootword28 \RGmark{c29}Rootword29 \RGmark{c30}Rootword30\RGmark{ce}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\end{document}

@@ -1,0 +1,62 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=300pt,textwidth=310pt,textheight=180pt,top=35pt]{geometry}
+\usepackage{dirtreex}\pagestyle{empty}\raggedbottom
+\parskip=0pt
+\makeatletter
+\newwrite\DGentries\immediate\openout\DGentries=\jobname.nodes
+\let\DGformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{\write\DGentries{ENTRY #1}\DGformat{#1}}
+\makeatother
+
+\makeatletter
+\ifcsname dte@check@defer\endcsname
+  \let\DGcheck\dte@check@defer
+  \def\dte@check@defer{%
+    \typeout{DG-DEFER attempt=\the\numexpr\dte@defercount+1\relax;piece=\the\dte@pagecount;tree=\the\dte@tnum}%
+    \DGcheck}
+\fi
+\makeatother
+
+\begin{document}
+\newcommand\DGheader{\vbox to179pt{\vfil}}\AddToHook{cmd/newpage/after}[deferral-test]{\DGheader}\begin{dirtreex}[box=true]
+\dir{E000}{C000}{
+\file{E001}{C001}
+\file{E002}{C002}
+\file{E003}{C003}
+\file{E004}{C004}
+\file{E005}{C005}
+\file{E006}{C006}
+\file{E007}{C007}
+\file{E008}{C008}
+\file{E009}{C009}
+\file{E010}{C010}
+\file{E011}{C011}
+\file{E012}{C012}
+\file{E013}{C013}
+\file{E014}{C014}
+\file{E015}{C015}
+\file{E016}{C016}
+\file{E017}{C017}
+\file{E018}{C018}
+\file{E019}{C019}
+\file{E020}{C020}
+\file{E021}{C021}
+\file{E022}{C022}
+\file{E023}{C023}
+\file{E024}{C024}
+\file{E025}{C025}
+\file{E026}{C026}
+\file{E027}{C027}
+\file{E028}{C028}
+\file{E029}{C029}
+\file{E030}{C030}
+\file{E031}{C031}
+\file{E032}{C032}
+\file{E033}{C033}
+\file{E034}{C034}
+\file{E035}{C035}
+}
+\end{dirtreex}
+
+\RemoveFromHook{cmd/newpage/after}[deferral-test]
+\end{document}

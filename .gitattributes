@@ -5,3 +5,5 @@
 *.jpeg  binary
 *.gif   binary
 *.pdf   binary
+
+tests/expected/**/*.json.gz binary

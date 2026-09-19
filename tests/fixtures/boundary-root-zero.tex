@@ -1,0 +1,149 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=170pt,textwidth=340pt,textheight=50pt,top=30pt,left=30pt]{geometry}
+\setlength\columnsep{20pt}
+\usepackage{dirtreex}
+\usepackage{etoolbox}
+\pagestyle{empty}
+\makeatletter
+\newif\ifBoundaryStrict
+\BoundaryStricttrue
+\newcount\PFormatted
+\newwrite\PNodes
+\newwrite\PEffects
+\immediate\openout\PNodes=\jobname.nodes
+\immediate\openout\PEffects=\jobname.effects
+\let\PName\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+ \global\advance\PFormatted by1
+ \protected@write\PNodes{}{ENTRY #1}\PName{#1}}
+\def\PSide{}
+\def\PFail#1{\PackageError{boundary-test}{#1}{Boundary columns must be unique and retain their next-entry style.}}
+% Phase 8B observer: project stored owners only for frozen depth assertions.
+% Legacy and owner-list sources run this same fixture without compatibility code.
+\newif\ifPOwnerLists
+\ifdefined\dte@foreach@owner\POwnerListstrue\else\POwnerListsfalse\fi
+\def\PProject#1{%
+  \edef\PRaw{#1}%
+  \ifPOwnerLists
+    \let\PActual\@empty
+    \@for\PItem:=\PRaw\do{%
+      \edef\PDepth{\dte@eget{\PItem}{d}}%
+      \ifx\PActual\@empty
+        \let\PActual\PDepth
+      \else
+        \edef\PActual{\PActual,\PDepth}%
+      \fi}%
+  \else
+    \let\PActual\PRaw
+  \fi}
+\def\PCheckStoredOwners#1{%
+  \ifPOwnerLists
+    \@for\PItem:=\PRaw\do{%
+      \edef\PDepth{\dte@eget{\PItem}{d}}%
+      \ifcsname POwner@#1@\PDepth\endcsname
+        \ifnum\PItem=\csname POwner@#1@\PDepth\endcsname\relax
+        \else\PFail{Wrong stored boundary owner after #1 at depth \PDepth}\fi
+      \else\PFail{Unexpected stored boundary owner after #1}\fi}%
+  \fi}
+\tikzset{p4 owner/.code={%
+ \ifx\PSide\@empty\else
+   \ifBoundaryStrict
+     \edef\PSeenName{PSeen@\pgfpictureid @\PSide @\the\dte@k}%
+     \ifcsname\PSeenName\endcsname\PFail{Repeated \PSide\space boundary depth \the\dte@k}\fi
+     \expandafter\gdef\csname\PSeenName\endcsname{1}%
+     \ifcsname POwner@\PCutIndex @\the\dte@k\endcsname
+       \ifnum#1=\csname POwner@\PCutIndex @\the\dte@k\endcsname\relax\else\PFail{Wrong style owner}\fi
+     \else\PFail{Unexpected boundary column}\fi
+   \fi
+   \protected@write\PEffects{}{PAINT \PSide/\the\dte@piecenum/\PCutIndex/\the\dte@k/#1}%
+ \fi}}
+% Recover the same cut index from the enduring boundary record, locally.
+\ifPOwnerLists
+  \patchcmd{\dte@drawpiece}{\dte@foreach@owner\dte@prevbk\dte@draw@topcolumn}
+    {\def\PSide{top}%
+     \edef\PCutIndex{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+     \dte@foreach@owner\dte@prevbk\dte@draw@topcolumn}
+    {}{\PFail{Cannot observe top boundary}}
+  \patchcmd{\dte@drawpiece}{\dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn}
+    {\def\PSide{bottom}%
+     \edef\PCutIndex{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+     \dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn}
+    {}{\PFail{Cannot observe bottom boundary}}
+\else
+  \patchcmd{\dte@drawpiece}{\@for\dte@extlvl:=\dte@prevbk\do}
+    {\def\PSide{top}%
+     \edef\PCutIndex{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+     \@for\dte@extlvl:=\dte@prevbk\do}
+    {}{\PFail{Cannot observe top boundary}}
+  \patchcmd{\dte@drawpiece}{\@for\dte@extlvl:=\dte@curbk\do}
+    {\def\PSide{bottom}%
+     \edef\PCutIndex{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+     \@for\dte@extlvl:=\dte@curbk\do}
+    {}{\PFail{Cannot observe bottom boundary}}
+\fi
+\let\PStore\dte@store@breaklines
+\def\dte@store@breaklines#1#2{%
+ \PStore{#1}{#2}%
+ \expandafter\gdef\csname PCut@#1\endcsname{1}%
+ \ifBoundaryStrict
+   \PProject{\dte@safeget{dte@breaklines@#2}}%
+   \PCheckStoredOwners{#1}%
+   \expandafter\let\expandafter\PExpected\csname PList@#1\endcsname
+   \ifx\PActual\PExpected\else\PFail{Wrong complete boundary list after #1}\fi
+ \fi}
+\let\PEntry\dte@render@entry
+\def\dte@render@entry#1{%
+ \ifcsname PHardCut@#1\endcsname\penalty-10000\relax\fi
+ \PEntry{#1}}
+\expandafter\def\csname PList@1\endcsname{0}
+\expandafter\def\csname POwner@1@0\endcsname{2}
+\expandafter\def\csname PList@2\endcsname{0,1}
+\expandafter\def\csname POwner@2@0\endcsname{5}
+\expandafter\def\csname POwner@2@1\endcsname{3}
+\expandafter\def\csname PList@3\endcsname{1}
+\expandafter\def\csname POwner@3@1\endcsname{4}
+\expandafter\def\csname PList@4\endcsname{}
+\expandafter\def\csname PList@5\endcsname{0,1}
+\expandafter\def\csname POwner@5@0\endcsname{7}
+\expandafter\def\csname POwner@5@1\endcsname{6}
+\expandafter\def\csname PList@6\endcsname{}
+\expandafter\def\csname PList@7\endcsname{0}
+\expandafter\def\csname POwner@7@0\endcsname{8}
+\expandafter\def\csname PList@8\endcsname{0}
+\expandafter\def\csname POwner@8@0\endcsname{9}
+\expandafter\def\csname PList@9\endcsname{}
+\expandafter\def\csname PHardCut@2\endcsname{1}
+\expandafter\def\csname PHardCut@3\endcsname{1}
+\expandafter\def\csname PHardCut@5\endcsname{1}
+\expandafter\def\csname PHardCut@6\endcsname{1}
+\expandafter\def\csname PHardCut@7\endcsname{1}
+\expandafter\def\csname PHardCut@8\endcsname{1}
+\expandafter\def\csname PHardCut@9\endcsname{1}
+\AtEndDocument{%
+ \ifnum\PFormatted=9\relax\else\PFail{Formatter count changed}\fi
+ \ifdte@needrerun
+  \typeout{P4-COVERAGE-PENDING}%
+ \else
+  \@for\PCut:=1,2,4,5,6,7,8\do{%
+    \ifcsname PCut@\PCut\endcsname\else\PFail{Required transition not split after \PCut}\fi}%
+  \typeout{P4-BOUNDARIES-PASSED}%
+ \fi
+ \typeout{P4-FORMATTED=\the\PFormatted}}
+\makeatother
+\begin{document}
+\begin{dirtreex}[box=true]
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=1},elbow radius=2pt]{ZR001}{ZC001}
+\dir[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=2},elbow radius=2pt]{ZR002}{ZC002}{
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=3},elbow radius=2pt]{ZR003}{ZC003}
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=4},elbow radius=2pt]{ZR004}{ZC004}
+}
+\dir[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=5},elbow radius=2pt]{ZR005}{ZC005}{
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=6},elbow radius=2pt]{ZR006}{ZC006}
+}
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=7},elbow radius=2pt]{ZR007}{ZC007}
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=8},elbow radius=2pt]{ZR008}{ZC008}
+\file[line color=blue,line width=1pt,line style={draw opacity=0.5,dash pattern={on 4pt off 2pt},p4 owner=9},elbow radius=2pt]{ZR009}{ZC009}
+\end{dirtreex}
+\end{document}

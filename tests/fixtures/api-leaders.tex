@@ -1,0 +1,143 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=2cm]{geometry}
+\usepackage{dirtreex}
+\setlength{\parindent}{0pt}
+\begin{document}
+\section*{Leader color and declaration scope}
+\begingroup
+\color{blue}
+\begin{dirtreex}[dotfill color=red,
+  dotfill command={\bfseries\dotfill}]
+  \verbdir|project_$|{blue root comment}{
+    \verbfile|main_app.py|{blue file comment}
+    \verbarchive|release_1.zip|{blue archive comment}{
+      \file{README.md}{blue first line\\blue second line}
+    }
+  }
+\end{dirtreex}
+\begin{dirtreex}
+  \dir{defaults}{blue dotted leaders restored}{
+    \file{plain.txt}{blue normal-weight comment}
+  }
+\end{dirtreex}
+\endgroup
+Black text after both trees.
+
+\section*{Blank leaders and empty comments}
+\begin{dirtreex}[dotfill command=\hfill]
+  \archive{blank.zip}{right-aligned comment}{
+    \file{empty.txt}{}
+    \file{lines.txt}{first line\\second line}
+  }
+\end{dirtreex}
+\begin{dirtreex}[dotfill command={%
+  \PackageError{issue5-check}{Leader ran for an empty comment}{}}]
+  \dir{empty comments}{}{\file{empty.txt}{}}
+\end{dirtreex}
+
+\section*{Natural wrapping in a narrow tree}
+\begin{minipage}{0.55\linewidth}
+\begin{dirtreex}[dotfill color=teal, dotfill command=\hrulefill]
+  \dir{root}{short comment}{
+    \file{long.txt}{This comment is deliberately long enough to wrap
+      naturally across several lines in this narrow tree.}
+  }
+\end{dirtreex}
+\end{minipage}
+
+\section*{Custom pattern in a larger font}
+\begin{dirtreex}[fontsize=\large, dotfill color=purple,
+  dotfill command={\cleaders\hbox to 0.8em{%
+    \hss\rule[0.4ex]{0.4em}{0.4pt}\hss}\hfill\kern0pt}]
+  \dir{large}{larger pattern}{\file{one.txt}{larger text}}
+\end{dirtreex}
+
+\clearpage
+\section*{Custom leaders across page breaks}
+\begin{dirtreex}[dotfill color=red, dotfill command=\hrulefill]
+  \dir{multipage}{red leaders on every page}{
+    \file{item-01.txt}{comment 01}
+    \file{item-02.txt}{comment 02}
+    \file{item-03.txt}{comment 03}
+    \file{item-04.txt}{comment 04}
+    \file{item-05.txt}{comment 05}
+    \file{item-06.txt}{comment 06}
+    \file{item-07.txt}{comment 07}
+    \file{item-08.txt}{comment 08}
+    \file{item-09.txt}{comment 09}
+    \file{item-10.txt}{comment 10}
+    \file{item-11.txt}{comment 11}
+    \file{item-12.txt}{comment 12}
+    \file{item-13.txt}{comment 13}
+    \file{item-14.txt}{comment 14}
+    \file{item-15.txt}{comment 15}
+    \file{item-16.txt}{comment 16}
+    \file{item-17.txt}{comment 17}
+    \file{item-18.txt}{comment 18}
+    \file{item-19.txt}{comment 19}
+    \file{item-20.txt}{comment 20}
+    \file{item-21.txt}{comment 21}
+    \file{item-22.txt}{comment 22}
+    \file{item-23.txt}{comment 23}
+    \file{item-24.txt}{comment 24}
+    \file{item-25.txt}{comment 25}
+    \file{item-26.txt}{comment 26}
+    \file{item-27.txt}{comment 27}
+    \file{item-28.txt}{comment 28}
+    \file{item-29.txt}{comment 29}
+    \file{item-30.txt}{comment 30}
+    \file{item-31.txt}{comment 31}
+    \file{item-32.txt}{comment 32}
+    \file{item-33.txt}{comment 33}
+    \file{item-34.txt}{comment 34}
+    \file{item-35.txt}{comment 35}
+    \file{item-36.txt}{comment 36}
+    \file{item-37.txt}{comment 37}
+    \file{item-38.txt}{comment 38}
+    \file{item-39.txt}{comment 39}
+    \file{item-40.txt}{comment 40}
+    \file{item-41.txt}{comment 41}
+    \file{item-42.txt}{comment 42}
+    \file{item-43.txt}{comment 43}
+    \file{item-44.txt}{comment 44}
+    \file{item-45.txt}{comment 45}
+    \file{item-46.txt}{comment 46}
+    \file{item-47.txt}{comment 47}
+    \file{item-48.txt}{comment 48}
+    \file{item-49.txt}{comment 49}
+    \file{item-50.txt}{comment 50}
+    \file{item-51.txt}{comment 51}
+    \file{item-52.txt}{comment 52}
+    \file{item-53.txt}{comment 53}
+    \file{item-54.txt}{comment 54}
+    \file{item-55.txt}{comment 55}
+    \file{item-56.txt}{comment 56}
+    \file{item-57.txt}{comment 57}
+    \file{item-58.txt}{comment 58}
+    \file{item-59.txt}{comment 59}
+    \file{item-60.txt}{comment 60}
+    \file{item-61.txt}{comment 61}
+    \file{item-62.txt}{comment 62}
+    \file{item-63.txt}{comment 63}
+    \file{item-64.txt}{comment 64}
+    \file{item-65.txt}{comment 65}
+    \file{item-66.txt}{comment 66}
+    \file{item-67.txt}{comment 67}
+    \file{item-68.txt}{comment 68}
+    \file{item-69.txt}{comment 69}
+    \file{item-70.txt}{comment 70}
+    \file{item-71.txt}{comment 71}
+    \file{item-72.txt}{comment 72}
+    \file{item-73.txt}{comment 73}
+    \file{item-74.txt}{comment 74}
+    \file{item-75.txt}{comment 75}
+    \file{item-76.txt}{comment 76}
+    \file{item-77.txt}{comment 77}
+    \file{item-78.txt}{comment 78}
+    \file{item-79.txt}{comment 79}
+    \file{item-80.txt}{comment 80}
+  }
+\end{dirtreex}
+Black text after the split tree.
+\end{document}

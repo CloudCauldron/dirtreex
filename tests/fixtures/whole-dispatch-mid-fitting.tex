@@ -1,0 +1,51 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=210pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+
+
+\makeatletter
+\newwrite\FTentries\immediate\openout\FTentries=\jobname.entries
+\newwrite\FTpieces\immediate\openout\FTpieces=\jobname.pieces
+\newwrite\FTtails\immediate\openout\FTtails=\jobname.tails
+\newcount\FTformatted
+\let\FTformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\FTformatted by1
+  \protected@write\FTentries{}{ENTRY \the\dte@tnum:#1}%
+  \edef\@currentlabel{ENTRY #1}\label{FT:\the\dte@tnum:#1}%
+  \FTformat{#1}}
+\let\FTpiece\dte@drawpiece
+\def\dte@drawpiece#1{%
+  \protected@write\FTpieces{}{PIECE #1;ht=\the\ht\dte@splitresult;dp=\the\dp\dte@splitresult}%
+  \FTpiece{#1}}
+\newcount\FTskips\let\FTskip\dte@skipcolumn
+\def\dte@skipcolumn{\global\advance\FTskips by1
+  \FTskip}
+\AtEndDocument{\typeout{FT-FORMATTED \the\FTformatted}}
+\makeatother
+
+
+\begin{document}
+\noindent PREFIX\par
+
+\begin{dirtreex}[box={margin={6pt,6pt,35pt,6pt}}]
+\dir{R000}{C000}{
+\file{R001}{C001}
+\file{R002}{C002}
+\file{R003}{C003}
+\file{R004}{C004}
+\file{R005}{C005}
+\file{R006}{C006}
+\file{R007}{C007}
+\file{R008}{C008}
+\file{R009}{C009}
+\file{R010}{C010}
+\file{R011}{C011}
+\file{R012}{C012}
+\file{R013}{C013}
+\file{R014}{C014}
+}
+\end{dirtreex}
+
+\end{document}

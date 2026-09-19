@@ -1,0 +1,82 @@
+\documentclass{article}
+\usepackage[paperwidth=300pt,paperheight=260pt,textwidth=260pt,textheight=220pt,left=20pt,top=20pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\parskip=0pt
+\parindent=0pt
+
+\makeatletter
+\newcount\AuditSkips
+\let\AuditSkip\dte@skipcolumn
+\def\dte@skipcolumn{%
+  \global\advance\AuditSkips by1
+  \typeout{AUDIT-SKIP \the\AuditSkips; page=\thepage; total=\the\pagetotal; goal=\the\pagegoal; vsize=\the\vsize; avail=\the\dte@availht; scratch=\the\dte@fitroom; min=\dte@minht; temp=\the\dte@tempdim}%
+
+  \AuditSkip}
+\let\AuditOutput\dte@output@breakable
+\def\dte@output@breakable{\typeout{AUDIT-FIRST page=\thepage; total=\the\pagetotal; goal=\the\pagegoal}\AuditOutput}
+\let\AuditCont\dte@dosplit@cont
+\def\dte@dosplit@cont{\typeout{AUDIT-CONT page=\thepage}\AuditCont}
+\ifcsname dte@check@progress\endcsname
+\let\AuditCheck\dte@check@progress
+\def\dte@check@progress#1#2{\AuditCheck{#1}{#2}\typeout{AUDIT-CHECK #1; deficit=\the\dte@tempdim; room=\meaning\dte@retryroom; stop=\if@tempswa yes\else no\fi}}
+\fi
+\makeatother
+
+
+
+\makeatletter
+\ifcsname dte@check@defer\endcsname
+  \let\DGcheck\dte@check@defer
+  \def\dte@check@defer{%
+    \typeout{DG-DEFER attempt=\the\numexpr\dte@defercount+1\relax;piece=\the\dte@pagecount;tree=\the\dte@tnum}%
+    \DGcheck}
+\fi
+\makeatother
+
+\begin{document}
+\newcommand\AuditHeader{\par\vbox to180pt{\vfil}\noindent\par}
+\AddToHook{cmd/newpage/after}{\AuditHeader}
+\AuditHeader
+
+
+\begin{dirtreex}[box=true,pagebreak={box break at={-45pt,0pt},tree break at=0pt}]
+\file{R000}{C000}
+\file{R001}{C001}
+\file{R002}{C002}
+\file{R003}{C003}
+\file{R004}{C004}
+\file{R005}{C005}
+\file{R006}{C006}
+\file{R007}{C007}
+\file{R008}{C008}
+\file{R009}{C009}
+\file{R010}{C010}
+\file{R011}{C011}
+\file{R012}{C012}
+\file{R013}{C013}
+\file{R014}{C014}
+\file{R015}{C015}
+\file{R016}{C016}
+\file{R017}{C017}
+\file{R018}{C018}
+\file{R019}{C019}
+\file{R020}{C020}
+\file{R021}{C021}
+\file{R022}{C022}
+\file{R023}{C023}
+\file{R024}{C024}
+\file{R025}{C025}
+\file{R026}{C026}
+\file{R027}{C027}
+\file{R028}{C028}
+\file{R029}{C029}
+\file{R030}{C030}
+\file{R031}{C031}
+\file{R032}{C032}
+\file{R033}{C033}
+\file{R034}{C034}
+\end{dirtreex}
+\everypar{}
+\typeout{AUDIT-DONE skips=\the\AuditSkips}
+\end{document}

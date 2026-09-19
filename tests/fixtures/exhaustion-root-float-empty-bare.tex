@@ -1,0 +1,35 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=400pt,textwidth=280pt,textheight=180pt,centering]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\newwrite\Aentries
+\immediate\openout\Aentries=\jobname.nodes
+\newcount\Aformatted
+\let\Aformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{\global\advance\Aformatted by1\write\Aentries{ENTRY #1}\Aformat{#1}}
+\makeatletter
+\let\Askip\dte@skipcolumn
+\newcount\Askips
+\def\dte@skipcolumn{%
+  \global\advance\Askips by1
+  \typeout{AUDIT-SKIP \the\Askips;page=\thepage;goal=\the\pagegoal;total=\the\pagetotal;avail=\the\dte@availht;min=\dte@minht}%
+  \ifnum\Askips>12 \errmessage{Audit guard: repeated column skips}\fi
+  \Askip}
+\let\Amin\dte@compute@minht
+\def\dte@compute@minht{\Amin\typeout{AUDIT-MIN total=\dte@minht;depth=\the\dte@tempdim}}
+\let\Apiece\dte@drawpiece
+\def\dte@drawpiece#1{\typeout{AUDIT-PIECE #1;page=\thepage;ht=\the\ht\dte@splitresult;dp=\the\dp\dte@splitresult}\Apiece{#1}}
+\AtEndDocument{\typeout{AUDIT-FORMATTED \the\Aformatted}\typeout{AUDIT-PIECES \the\dte@piecenum}}
+\makeatother
+\AddToHook{shipout/before}{\ifnum\value{page}>15 \errmessage{Audit guard: too many pages}\fi}
+\AddToHook{para/before}{\ifinner\else\ifvmode\hrule height0pt\fi\fi}
+\renewcommand\textfraction{0}\renewcommand\topfraction{.9}\begin{document}\begin{figure}[!t]\centering FLOATMARK\rule{100pt}{35pt}\end{figure}
+
+\begin{dirtreex}[box=false,pagebreak=true,box={border color=red},line color=blue]
+\dir{E000}{ROOT001\\ROOT002\\ROOT003\\ROOT004\\ROOT005\\ROOT006\\ROOT007\\ROOT008\\ROOT009\\ROOT010\\ROOT011\\ROOT012\\ROOT013\\ROOT014}{
+}
+\end{dirtreex}
+AFTER.
+\end{document}

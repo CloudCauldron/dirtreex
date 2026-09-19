@@ -1,0 +1,205 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=330pt,textwidth=320pt,textheight=210pt,top=30pt,left=40pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\providecommand\NSNodeName{C}
+\providecommand\NSPrivateName{dte@content}
+\newcount\NSHooks
+\newcount\NSTreePictures
+\newcount\NSFormatted
+\newcount\NSPassed
+\newbox\NSProbe
+\newif\ifNSChecking
+\newwrite\NSEvents
+\newwrite\NSNodes
+\immediate\openout\NSEvents=\jobname.events
+\immediate\openout\NSNodes=\jobname.nodes
+\let\NSFormat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\NSFormatted by1
+  \protected@write\NSNodes{}{ENTRY \NScase:#1}%
+  \NSFormat{#1}}
+\tikzset{every picture/.append style={execute at end picture={%
+  \ifNSChecking\else
+    \global\advance\NSHooks by1
+    \ifdte@inenv
+      \edef\NSactualpic{\csname pgf@sh@pi@\NSprefix\NSPrivateName\NSsuffix\endcsname}%
+      \edef\NSexpectedpic{\pgfpictureid}%
+      \ifx\NSactualpic\NSexpectedpic\else
+        \PackageError{namespace-test}{Private node affix or picture identity changed \NScase}{The private node must retain inherited affixes in this picture.}%
+      \fi
+      \global\advance\NSTreePictures by1
+    \fi
+    \path (current bounding box.south west) ++(0,-2pt);
+    \protected@write\NSEvents{}{END \NScase}%
+  \fi}}}
+\def\NSCheckMetadata{%
+  \@for\NSfield:=ns,np,nt,pi,ma\do{%
+    \expandafter\let\expandafter\NSactual\csname pgf@sh@\NSfield @\NSfull\endcsname
+    \expandafter\let\expandafter\NSsaved\csname pgf@sh@\NSfield @\NSguard\endcsname
+    \ifx\NSactual\relax
+      \PackageError{namespace-test}{Missing user node metadata \NScase}{The test must have a real user node.}%
+    \fi
+    \ifx\NSactual\NSsaved\else
+      \PackageError{namespace-test}{User node metadata changed \NScase/\NSfield}{A dirtreex picture overwrote user node state.}%
+    \fi}}
+\def\NSStart#1#2#3{%
+  \def\NScase{#1}\def\NSprefix{#2}\def\NSsuffix{#3}%
+  \tikzset{name prefix={#2},name suffix={#3}}%
+  \edef\NSfull{#2\NSNodeName#3}%
+  \edef\NSguard{#2NSGuard#3}%
+  \global\NSHooks=0 \global\NSTreePictures=0
+  \global\NSFormatted=0
+  \begin{tikzpicture}[remember picture]
+    \node[draw,rounded corners=2pt] (\NSNodeName) {#1USER};
+    \pgfnodealias{\NSguard}{\NSfull}%
+  \end{tikzpicture}\par
+  \NSCheckMetadata}
+\def\NSFinish#1#2{%
+  \NSCheckMetadata
+  % Exercise later TikZ references under the inherited prefix/suffix.
+  % The probe box is not emitted, so it adds no paragraph or page material.
+  \setbox\NSProbe=\hbox{%
+    \NSCheckingtrue
+    \begin{tikzpicture}[remember picture,overlay]
+      \foreach\NSanchor in {center,north,south,east,west}{%
+        \path (\NSNodeName.\NSanchor);
+        \pgfgetlastxy{\NSax}{\NSay}%
+        \path (NSGuard.\NSanchor);
+        \pgfgetlastxy{\NSbx}{\NSby}%
+        \ifdim\NSax=\NSbx\else
+          \PackageError{namespace-test}{Anchor x changed \NScase}{Later references must resolve to the user node.}%
+        \fi
+        \ifdim\NSay=\NSby\else
+          \PackageError{namespace-test}{Anchor y changed \NScase}{Later references must resolve to the user node.}%
+        \fi
+      }
+    \end{tikzpicture}}%
+  \ifnum\NSFormatted=#1\relax\else
+    \PackageError{namespace-test}{Entry formatting count changed \NScase}{Each entry must be formatted exactly once.}%
+  \fi
+  \ifnum\NSHooks>0\else
+    \PackageError{namespace-test}{Picture hooks did not run \NScase}{The inherited picture hook must remain effective.}%
+  \fi
+  \ifnum\NSTreePictures<#2\relax
+    \PackageError{namespace-test}{Missing tree pictures \NScase}{Whole and split painter paths must execute.}%
+  \fi
+  \typeout{NS-OK-\NScase}%
+  \typeout{NS-TREE-PICTURES-\NScase=\the\NSTreePictures}%
+  \typeout{NS-HOOKS-\NScase=\the\NSHooks}%
+  \global\advance\NSPassed by1}
+\AtEndDocument{%
+  \ifnum\NSPassed=4
+    \typeout{NS-ALL-CHECKS-PASSED}%
+  \else
+    \PackageError{namespace-test}{Missing namespace scenarios}{All four scenarios must execute.}%
+  \fi}
+\makeatother
+\begin{document}
+\begingroup
+\NSStart{A}{prefix-}{}
+\begin{dirtreex}[box=true,pagebreak=false]
+\dir{AR000}{AC000}{
+\file{AR001}{AC001}
+\file{AR002}{AC002}
+}
+\end{dirtreex}
+\NSFinish{3}{1}
+\endgroup
+\clearpage
+
+\begingroup
+\NSStart{B}{}{-suffix}
+\begin{dirtreex}[box=false]
+\dir{BR000}{BC000}{
+\file{BR001}{BC001}
+\file{BR002}{BC002}
+\file{BR003}{BC003}
+\file{BR004}{BC004}
+\file{BR005}{BC005}
+\file{BR006}{BC006}
+\file{BR007}{BC007}
+\file{BR008}{BC008}
+\file{BR009}{BC009}
+\file{BR010}{BC010}
+\file{BR011}{BC011}
+\file{BR012}{BC012}
+\file{BR013}{BC013}
+\file{BR014}{BC014}
+\file{BR015}{BC015}
+\file{BR016}{BC016}
+\file{BR017}{BC017}
+\file{BR018}{BC018}
+\file{BR019}{BC019}
+\file{BR020}{BC020}
+\file{BR021}{BC021}
+\file{BR022}{BC022}
+\file{BR023}{BC023}
+\file{BR024}{BC024}
+}
+\end{dirtreex}
+\NSFinish{25}{2}
+\endgroup
+\clearpage
+
+\begingroup
+\NSStart{D}{prefix-}{-suffix}
+\begin{dirtreex}[box=true]
+\dir{DR000}{DC000}{
+\file{DR001}{DC001}
+\file{DR002}{DC002}
+\file{DR003}{DC003}
+\file{DR004}{DC004}
+\file{DR005}{DC005}
+\file{DR006}{DC006}
+\file{DR007}{DC007}
+\file{DR008}{DC008}
+\file{DR009}{DC009}
+\file{DR010}{DC010}
+\file{DR011}{DC011}
+\file{DR012}{DC012}
+\file{DR013}{DC013}
+\file{DR014}{DC014}
+\file{DR015}{DC015}
+\file{DR016}{DC016}
+\file{DR017}{DC017}
+\file{DR018}{DC018}
+\file{DR019}{DC019}
+\file{DR020}{DC020}
+\file{DR021}{DC021}
+\file{DR022}{DC022}
+\file{DR023}{DC023}
+\file{DR024}{DC024}
+\file{DR025}{DC025}
+\file{DR026}{DC026}
+\file{DR027}{DC027}
+\file{DR028}{DC028}
+\file{DR029}{DC029}
+\file{DR030}{DC030}
+\file{DR031}{DC031}
+\file{DR032}{DC032}
+\file{DR033}{DC033}
+\file{DR034}{DC034}
+\file{DR035}{DC035}
+\file{DR036}{DC036}
+}
+\end{dirtreex}
+\NSFinish{37}{2}
+\endgroup
+\clearpage
+
+\begingroup
+\NSStart{E}{prefix-}{-suffix}
+\begin{dirtreex}[box=false,pagebreak=false]
+\dir{ER000}{EC000}{
+\file{ER001}{EC001}
+\file{ER002}{EC002}
+}
+\end{dirtreex}
+\NSFinish{3}{0}
+\endgroup
+\clearpage
+\end{document}

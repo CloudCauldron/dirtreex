@@ -1,0 +1,224 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=210pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+\makeatletter
+% Observe real painters and their existing caller boundaries; do not stub them.
+\newcount\OCformatted
+\newcount\OCrejects
+\newcount\OCwholetrials
+\newcount\OCpreliminary
+\newcount\OCpiececalls
+\newcount\OChooks
+\newcount\OCmeasurebase
+\newcount\OCrejectbase
+\newif\ifOCactive
+\newif\ifOCpendingwhole
+\newwrite\OCentries
+\newwrite\OCeffects
+\immediate\openout\OCentries=\jobname.entries
+\immediate\openout\OCeffects=\jobname.effects
+\def\OCerror#1{\PackageError{fitting-ownership}{#1}{Picture identity and copied-material ownership must be preserved.}}
+\let\OCformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\OCformatted by1
+  \protected@write\OCentries{}{ENTRY \the\dte@tnum:#1}%
+  \OCformat{#1}}
+\def\OChook{%
+  \ifOCactive
+    \ifnum\dte@piecenum=\OCexpected\relax\else
+      \OCerror{Picture hook saw the wrong ordinal for \OCkind}\fi
+    \global\advance\OChooks by1
+    \typeout{OC-HOOK tree=\the\dte@tnum;kind=\OCkind;ordinal=\the\dte@piecenum}%
+    \protected@write\OCeffects{}{PICTURE \the\dte@tnum:\OCkind:\the\dte@piecenum}%
+  \fi}
+\tikzset{every picture/.append style={execute at end picture={\OChook}}}
+\let\OCsingle\dte@box@single
+\def\dte@box@single#1#2{%
+  \edef\OCexpected{\the\dte@piecenum}%
+  \def\OCkind{assessment}%
+  \ifx#2\dte@splitresult
+    \def\OCkind{whole-trial}%
+    \global\advance\OCwholetrials by1
+  \else
+    \global\advance\OCpreliminary by1
+  \fi
+  \OCactivetrue
+  \OCsingle#1#2%
+  \OCactivefalse
+  % Even a counted whole trial has not advanced until this helper returns.
+  \ifnum\dte@piecenum=\OCexpected\relax\else
+    \OCerror{Whole helper advanced before its caller}\fi
+  \ifx#2\dte@splitresult
+    \edef\OCwholeexpected{\number\numexpr\dte@piecenum+1\relax}%
+    \OCpendingwholetrue
+  \fi}
+\let\OCheight\dte@measureheight
+\def\dte@measureheight#1{%
+  \ifOCpendingwhole
+    \ifnum\dte@piecenum=\OCwholeexpected\relax\else
+      \OCerror{Whole trial did not advance after its picture}\fi
+    \OCpendingwholefalse
+  \fi
+  \OCheight#1}
+\let\OCdraw\dte@drawpiece
+\def\dte@drawpiece#1{%
+  \edef\OCexpected{\number\numexpr\dte@piecenum+1\relax}%
+  \edef\OCkind{#1}%
+  \OCactivetrue
+  \OCdraw{#1}%
+  \OCactivefalse
+  \ifnum\dte@piecenum=\OCexpected\relax\else
+    \OCerror{Split painter did not advance once}\fi}
+\let\OCmeasure\dte@measurepiece
+\def\dte@measurepiece#1{%
+  \OCmeasurebase=\dte@piecenum
+  \global\advance\OCpiececalls by1
+  \OCmeasure{#1}%
+  \ifnum\dte@piecenum=\numexpr\OCmeasurebase+1\relax\else
+    \OCerror{Measurement advanced more than once}\fi}
+\let\OCdiscard\dte@discardpiece
+\def\dte@discardpiece{%
+  \ifvoid\dte@tbox\OCerror{Discard called without a measured picture}\fi
+  \edef\OCsourceextent{\the\wd\dte@framebox:\the\ht\dte@framebox:\the\dp\dte@framebox}%
+  \OCrejectbase=\dte@piecenum
+  \OCdiscard
+  \ifvoid\dte@tbox\else\OCerror{Rejected picture retained}\fi
+  \ifnum\dte@piecenum=\numexpr\OCrejectbase-1\relax\else
+    \OCerror{Rejected ordinal not undone exactly once}\fi
+  \edef\OCafterextent{\the\wd\dte@framebox:\the\ht\dte@framebox:\the\dp\dte@framebox}%
+  \ifx\OCsourceextent\OCafterextent\else\OCerror{Rejection changed the source box}\fi
+  \global\advance\OCrejects by1
+  \typeout{OC-REJECT tree=\the\dte@tnum;ordinal=\the\dte@piecenum}}
+\def\OCpositive#1{\ifnum#1>0\else\OCerror{Missing required path coverage}\fi}
+\AtEndDocument{%
+  \OCpositive\OCrejects \OCpositive\OCwholetrials
+  \OCpositive\OCpreliminary \OCpositive\OCpiececalls \OCpositive\OChooks
+  \ifOCpendingwhole\OCerror{Unfinished whole-picture bookkeeping}\fi
+  \ifnum\OCformatted=87\else\OCerror{Semantic rows were lost or rebuilt}\fi
+  \typeout{OC-COVERAGE formatted=\the\OCformatted;rejects=\the\OCrejects;whole=\the\OCwholetrials;preliminary=\the\OCpreliminary;pieces=\the\OCpiececalls;hooks=\the\OChooks}%
+  \typeout{OC-ALL-CHECKS-PASSED}}
+\makeatother
+\begin{document}
+\begin{dirtreex}
+\dir{FROOT}{FROOTCOMMENT}{
+\file{F001}{FC001}
+\file{F002}{FC002}
+}
+\end{dirtreex}
+\clearpage
+\begingroup
+\AddToHook{para/before}[ownership-shrink]{\vskip0pt minus 4pt\relax}
+\begin{dirtreex}[box={margin={6pt,6pt,65pt,6pt}}]
+\dir{WROOT}{WROOTCOMMENT}{
+\file{W001}{WC001}
+\file{W002}{WC002}
+\file{W003}{WC003}
+\file{W004}{WC004}
+\file{W005}{WC005}
+\file{W006}{WC006}
+\file{W007}{WC007}
+\file{W008}{WC008}
+\file{W009}{WC009}
+\file{W010}{WC010}
+\file{W011}{WC011}
+\file{W012}{WC012}
+\file{W013}{WC013}
+\file{W014}{WC014}
+\file{W015}{WC015}
+\file{W016}{WC016}
+}
+\end{dirtreex}
+\RemoveFromHook{para/before}[ownership-shrink]
+\endgroup
+\clearpage
+\begingroup
+\makeatletter
+\tikzset{every picture/.append style={execute at end picture={%
+  \ifOCactive\ifx\dte@piecetype\dte@pfirst
+    \path (current bounding box.south west) ++(0,-35pt);
+  \fi\fi}}}
+\makeatother
+\noindent PRECEDING PARAGRAPH\par
+\begin{dirtreex}
+\dir{MROOT}{MROOTCOMMENT}{
+\file{M001}{MC001}
+\file{M002}{MC002}
+\file{M003}{MC003}
+\file{M004}{MC004}
+\file{M005}{MC005}
+\file{M006}{MC006}
+\file{M007}{MC007}
+\file{M008}{MC008}
+\file{M009}{MC009}
+\file{M010}{MC010}
+\file{M011}{MC011}
+\file{M012}{MC012}
+\file{M013}{MC013}
+\file{M014}{MC014}
+\file{M015}{MC015}
+\file{M016}{MC016}
+\file{M017}{MC017}
+\file{M018}{MC018}
+\file{M019}{MC019}
+\file{M020}{MC020}
+\file{M021}{MC021}
+\file{M022}{MC022}
+\file{M023}{MC023}
+\file{M024}{MC024}
+\file{M025}{MC025}
+\file{M026}{MC026}
+\file{M027}{MC027}
+\file{M028}{MC028}
+\file{M029}{MC029}
+\file{M030}{MC030}
+\file{M031}{MC031}
+\file{M032}{MC032}
+\file{M033}{MC033}
+\file{M034}{MC034}
+\file{M035}{MC035}
+\file{M036}{MC036}
+\file{M037}{MC037}
+\file{M038}{MC038}
+\file{M039}{MC039}
+\file{M040}{MC040}
+\file{M041}{MC041}
+\file{M042}{MC042}
+\file{M043}{MC043}
+\file{M044}{MC044}
+\file{M045}{MC045}
+\file{M046}{MC046}
+}
+\end{dirtreex}
+\endgroup
+\clearpage
+\begingroup
+\AddToHook{para/before}[ownership-shrink]{\vskip0pt minus 2pt\relax}
+\begin{dirtreex}[box=false]
+\dir{BROOT}{BROOTCOMMENT}{
+\file{B001}{BC001}
+\file{B002}{BC002}
+\file{B003}{BC003}
+\file{B004}{BC004}
+\file{B005}{BC005}
+\file{B006}{BC006}
+\file{B007}{BC007}
+\file{B008}{BC008}
+\file{B009}{BC009}
+\file{B010}{BC010}
+\file{B011}{BC011}
+\file{B012}{BC012}
+\file{B013}{BC013}
+\file{B014}{BC014}
+\file{B015}{BC015}
+\file{B016}{BC016}
+\file{B017}{BC017}
+\file{B018}{BC018}
+\file{B019}{BC019}
+}
+\end{dirtreex}
+\RemoveFromHook{para/before}[ownership-shrink]
+\endgroup
+\end{document}

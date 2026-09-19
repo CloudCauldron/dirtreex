@@ -1,0 +1,192 @@
+\documentclass[11pt,oneside]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=160mm,paperheight=180mm,margin=16mm]{geometry}
+\usepackage{dirtreex}
+
+\usepackage{zref-savepos,etoolbox}
+\newcommand{\RGmark}[1]{\zsavepos{rg-\RGcase-#1}}
+\makeatletter
+\let\RGname\DirtreexFormatName
+\renewcommand{\DirtreexFormatName}[1]{\RGmark{n#1}\RGname{#1}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \typeout{RG-RAW|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \dte@normalize@rowbox}{}{\errmessage{Cannot probe root dimensions}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \dte@normalize@rowbox
+  \typeout{RG-NORM|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \typeout{RG-BLS|\RGcase|\number\dte@bls}%
+}{}{\errmessage{Cannot probe normalized dimensions}}
+\let\RGoutput\dte@output@framed
+\def\dte@output@framed{%
+  \typeout{RG-FRAME|\RGcase|\number\ht\dte@framebox|\number\dp\dte@framebox|\number\wd\dte@framebox}%
+  \RGoutput}
+\let\RGconnector\dte@draw@connector
+\def\dte@draw@connector#1{%
+  \typeout{RG-CONN|\RGcase|#1|\number\dte@scratch}%
+  \RGconnector{#1}}
+\makeatother
+\pagestyle{empty}
+
+
+\begin{document}
+\begingroup\def\RGcase{1}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=false,pagebreak=true,fontsize=\small,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Comment01\RGmark{e1}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+\file{ITEM004}{Child004}
+\file{ITEM005}{Child005}
+\file{ITEM006}{Child006}
+\file{ITEM007}{Child007}
+\file{ITEM008}{Child008}
+\file{ITEM009}{Child009}
+\file{ITEM010}{Child010}
+\file{ITEM011}{Child011}
+\file{ITEM012}{Child012}
+\file{ITEM013}{Child013}
+\file{ITEM014}{Child014}
+\file{ITEM015}{Child015}
+\file{ITEM016}{Child016}
+\file{ITEM017}{Child017}
+\file{ITEM018}{Child018}
+\file{ITEM019}{Child019}
+\file{ITEM020}{Child020}
+\file{ITEM021}{Child021}
+\file{ITEM022}{Child022}
+\file{ITEM023}{Child023}
+\file{ITEM024}{Child024}
+\file{ITEM025}{Child025}
+\file{ITEM026}{Child026}
+\file{ITEM027}{Child027}
+\file{ITEM028}{Child028}
+\file{ITEM029}{Child029}
+\file{ITEM030}{Child030}
+\file{ITEM031}{Child031}
+\file{ITEM032}{Child032}
+\file{ITEM033}{Child033}
+\file{ITEM034}{Child034}
+\file{ITEM035}{Child035}
+\file{ITEM036}{Child036}
+\file{ITEM037}{Child037}
+\file{ITEM038}{Child038}
+\file{ITEM039}{Child039}
+\file{ITEM040}{Child040}
+\file{ITEM041}{Child041}
+\file{ITEM042}{Child042}
+\file{ITEM043}{Child043}
+\file{ITEM044}{Child044}
+\file{ITEM045}{Child045}
+\file{ITEM046}{Child046}
+\file{ITEM047}{Child047}
+\file{ITEM048}{Child048}
+\file{ITEM049}{Child049}
+\file{ITEM050}{Child050}
+\file{ITEM051}{Child051}
+\file{ITEM052}{Child052}
+\file{ITEM053}{Child053}
+\file{ITEM054}{Child054}
+\file{ITEM055}{Child055}
+\file{ITEM056}{Child056}
+\file{ITEM057}{Child057}
+\file{ITEM058}{Child058}
+\file{ITEM059}{Child059}
+\file{ITEM060}{Child060}
+\file{ITEM061}{Child061}
+\file{ITEM062}{Child062}
+\file{ITEM063}{Child063}
+\file{ITEM064}{Child064}
+\file{ITEM065}{Child065}
+\file{ITEM066}{Child066}
+\file{ITEM067}{Child067}
+\file{ITEM068}{Child068}
+\file{ITEM069}{Child069}
+\file{ITEM070}{Child070}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{2}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=false,pagebreak=true,fontsize=\small,box={border color=red},line color=blue]
+\dir{ROOT}{\RGmark{c1}Comment01\RGmark{e1}\\\RGmark{c2}Comment02\RGmark{e2}\\\RGmark{c3}Comment03\RGmark{e3}\\\RGmark{c4}Comment04\RGmark{e4}}{
+\dir{CHILD}{Child comment}{\file{GRAND}{Grand comment}}
+\file{ITEM003}{Child003}
+\file{ITEM004}{Child004}
+\file{ITEM005}{Child005}
+\file{ITEM006}{Child006}
+\file{ITEM007}{Child007}
+\file{ITEM008}{Child008}
+\file{ITEM009}{Child009}
+\file{ITEM010}{Child010}
+\file{ITEM011}{Child011}
+\file{ITEM012}{Child012}
+\file{ITEM013}{Child013}
+\file{ITEM014}{Child014}
+\file{ITEM015}{Child015}
+\file{ITEM016}{Child016}
+\file{ITEM017}{Child017}
+\file{ITEM018}{Child018}
+\file{ITEM019}{Child019}
+\file{ITEM020}{Child020}
+\file{ITEM021}{Child021}
+\file{ITEM022}{Child022}
+\file{ITEM023}{Child023}
+\file{ITEM024}{Child024}
+\file{ITEM025}{Child025}
+\file{ITEM026}{Child026}
+\file{ITEM027}{Child027}
+\file{ITEM028}{Child028}
+\file{ITEM029}{Child029}
+\file{ITEM030}{Child030}
+\file{ITEM031}{Child031}
+\file{ITEM032}{Child032}
+\file{ITEM033}{Child033}
+\file{ITEM034}{Child034}
+\file{ITEM035}{Child035}
+\file{ITEM036}{Child036}
+\file{ITEM037}{Child037}
+\file{ITEM038}{Child038}
+\file{ITEM039}{Child039}
+\file{ITEM040}{Child040}
+\file{ITEM041}{Child041}
+\file{ITEM042}{Child042}
+\file{ITEM043}{Child043}
+\file{ITEM044}{Child044}
+\file{ITEM045}{Child045}
+\file{ITEM046}{Child046}
+\file{ITEM047}{Child047}
+\file{ITEM048}{Child048}
+\file{ITEM049}{Child049}
+\file{ITEM050}{Child050}
+\file{ITEM051}{Child051}
+\file{ITEM052}{Child052}
+\file{ITEM053}{Child053}
+\file{ITEM054}{Child054}
+\file{ITEM055}{Child055}
+\file{ITEM056}{Child056}
+\file{ITEM057}{Child057}
+\file{ITEM058}{Child058}
+\file{ITEM059}{Child059}
+\file{ITEM060}{Child060}
+\file{ITEM061}{Child061}
+\file{ITEM062}{Child062}
+\file{ITEM063}{Child063}
+\file{ITEM064}{Child064}
+\file{ITEM065}{Child065}
+\file{ITEM066}{Child066}
+\file{ITEM067}{Child067}
+\file{ITEM068}{Child068}
+\file{ITEM069}{Child069}
+\file{ITEM070}{Child070}
+}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\end{document}

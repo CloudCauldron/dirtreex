@@ -1,0 +1,182 @@
+% Phase 5A contract probe: outside-env cases preserve existing diagnostics
+% and continuation only; they make no S1 support claim.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage[margin=24mm]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\ProbeErrors \newcount\ProbeFormatted \newcount\ProbeObserved
+\newcount\ProbeNameEffects \newcount\ProbeCommentEffects \newcount\ProbeIconEffects
+\newcount\ProbeCaptureLevel
+\newdimen\ProbeOuterEm
+\def\ProbeFail#1{\errmessage{PHASE5A ASSERTION FAILED: #1}}
+\def\ProbeInt#1#2#3{\ifnum#1=#2\relax\else\ProbeFail{#3}\fi}
+\def\ProbeEqual#1#2#3{\ifx#1#2\else\ProbeFail{#3}\fi}
+\def\ProbeField#1#2#3{%
+  \expandafter\let\expandafter\ProbeActual\csname dte@e#1#2\endcsname
+  \def\ProbeExpected{#3}\ProbeEqual\ProbeActual\ProbeExpected{field #1/#2}}
+\def\ProbeRecord#1#2#3#4#5{%
+  \ProbeField{#1}{d}{#2}\ProbeField{#1}{t}{#3}%
+  \ProbeField{#1}{n}{#4}\ProbeField{#1}{c}{#5}}
+\NewDocumentCommand\ProbeReadRaw{v}{\gdef\ProbeRaw{#1}}
+\NewDocumentCommand\ProbeReadTab{v}{\gdef\ProbeTab{#1}}
+\ProbeReadRaw|A_ B%$#&^~\{}|
+\ProbeReadTab|A_ B	%$#&^~\{}|
+\ExplSyntaxOn
+\cs_new_protected:Npn \ProbeCats #1#2#3#4\ProbeStop
+  {
+    \token_if_letter:NTF #1 {} {\ProbeFail{verbatim~letter~category}}
+    \token_if_other:NTF #2 {} {\ProbeFail{verbatim~underscore~category}}
+    \token_if_active:NTF #3 {} {\ProbeFail{verbatim~space~category}}
+  }
+\cs_new_protected:Npn \ProbeTabCat #1#2#3#4#5#6\ProbeStop
+  {\token_if_active:NTF #5 {} {\ProbeFail{verbatim~tab~category}}}
+\ExplSyntaxOff
+\def\ProbeRawField#1#2{%
+  \expandafter\let\expandafter\ProbeActual\csname dte@e#1n\endcsname
+  \ProbeEqual\ProbeActual#2{verbatim token identity at #1}%
+  \expandafter\ProbeCats\ProbeActual\ProbeStop}
+\def\ProbeExpectedError#1{%
+  \edef\ProbeMessage{\string#1\space used outside dirtreex environment}%
+  \edef\ProbeHelp{Every \string#1\space must appear inside the body of a dirtreex environment.}}
+\def\ProbeColor{red}\def\ProbeStyle{solid}\def\ProbeWidth{2pt}\def\ProbeRadius{0pt}
+\protected\def\ProbeProtectedRadius{0.3pt}
+\def\ProbeNameText{P5NAME}\def\ProbeCommentText{P5COMMENT}\def\ProbeIconText{P5ICON}
+\def\ProbeName{\global\advance\ProbeNameEffects by1\relax\ProbeNameText}
+\def\ProbeComment{\global\advance\ProbeCommentEffects by1\relax\ProbeCommentText}
+\def\ProbeIcon{\global\advance\ProbeIconEffects by1\relax\ProbeIconText}
+\pgfkeys{/dte/entry/probe observe/.code={%
+  \ProbeInt{\dte@cnt}{#1}{option callback count}%
+  \ProbeInt{\currentgrouplevel}{\numexpr\ProbeCaptureLevel+1\relax}{extra capture group}%
+  \expandafter\ifx\csname dte@e#1n\endcsname\relax\ProbeFail{name absent before options}\fi
+  \expandafter\ifx\csname dte@e#1c\endcsname\relax\ProbeFail{comment absent before options}\fi
+  \ProbeInt{\dte@eget{#1}{d}}{\dte@depth}{depth absent before options}%
+  \ifnum\dte@eget{#1}{t}<0\ProbeFail{type absent before options}\fi
+  \global\advance\ProbeObserved by1\relax}}
+\let\ProbeOriginalPreprocess\dte@preprocess
+\def\dte@preprocess{%
+  \ifnum\dte@tnum=1\relax
+    \ProbeInt{\dte@cnt}{7}{first tree count}%
+    \ProbeRecord{1}{0}{1}{\ProbeName}{\ProbeComment}%
+    \ProbeRecord{2}{1}{2}{archive.zip}{archive}%
+    \ProbeRecord{5}{4}{0}{ordinary.txt}{ordinary}%
+    \ProbeRawField{3}\ProbeRaw\ProbeRawField{4}\ProbeRaw
+    \ProbeRawField{6}\ProbeRaw\ProbeRawField{7}\ProbeRaw
+    \ProbeField{3}{d}{2}\ProbeField{3}{t}{1}%
+    \ProbeField{4}{d}{3}\ProbeField{4}{t}{2}%
+    \ProbeField{6}{d}{4}\ProbeField{6}{t}{0}%
+    \ProbeField{7}{d}{0}\ProbeField{7}{t}{0}%
+    \ProbeField{1}{lc}{blue}\ProbeField{1}{ls}{dashed}%
+    \ProbeField{1}{lw}{1em}\ProbeField{1}{er}{0.7pt}%
+    \ProbeField{1}{i}{\ProbeIcon}\ProbeField{2}{er}{\ProbeProtectedRadius}%
+    \def\ProbeExpected{\ProbeColor}\ProbeEqual\dte@linecolor\ProbeExpected{environment color reference}%
+    \def\ProbeExpected{\ProbeStyle}\ProbeEqual\dte@linestyle\ProbeExpected{environment style reference}%
+    \ifdim\dte@rulewidth=\ProbeOuterEm\else\ProbeFail{environment width binding}\fi
+    \ifdim\dte@elbowR=\ProbeOuterEm\else\ProbeFail{environment radius binding}\fi
+    \ifdim\dimexpr\dte@eget{2}{er}\relax=0.3pt\else\ProbeFail{protected radius render meaning}\fi
+    \ProbeInt{\ProbeNameEffects}{0}{name expanded during capture}%
+    \ProbeInt{\ProbeCommentEffects}{0}{comment expanded during capture}%
+    \ProbeInt{\ProbeIconEffects}{0}{icon expanded during capture}%
+    \typeout{P5A FIRST-MODEL PASS; count=7; observed=\the\ProbeObserved}%
+  \else
+    \ProbeInt{\dte@tnum}{2}{unexpected tree}%
+    \ProbeInt{\dte@cnt}{1}{sequential count}%
+    \ProbeRecord{1}{0}{0}{P5SECOND}{ready}%
+    \ProbeField{1}{i}{}\ProbeField{1}{lc}{}\ProbeField{1}{ls}{}%
+    \ProbeField{1}{lw}{}\ProbeField{1}{er}{}%
+    \expandafter\ifx\csname dte@e7n\endcsname\relax\else\ProbeFail{sequential stale field}\fi
+    \typeout{P5A SEQUENTIAL-MODEL PASS; count=1}%
+  \fi
+  \ProbeOriginalPreprocess}
+\let\ProbeOriginalFormat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\ProbeFormatted by1\relax
+  \ifnum\dte@tnum=1\relax\ifnum#1=1\relax
+    \ifdim\dimexpr\dte@eget{1}{lw}\relax=1em\else\ProbeFail{entry em render binding}\fi
+    \ifdim\dimexpr\dte@eget{1}{lw}\relax=\ProbeOuterEm\ProbeFail{entry em frozen at capture}\fi
+    \def\ProbeExpected{P5NAME}\ProbeEqual\ProbeNameText\ProbeExpected{name capture-local definition leaked}%
+    \def\ProbeExpected{P5COMMENT}\ProbeEqual\ProbeCommentText\ProbeExpected{comment capture-local definition leaked}%
+    \def\ProbeExpected{P5ICON}\ProbeEqual\ProbeIconText\ProbeExpected{icon capture-local definition leaked}%
+  \fi\fi
+  \ProbeOriginalFormat{#1}}
+\makeatother
+\begin{document}
+\makeatletter
+\begingroup
+  \def\PackageError#1#2#3{%
+    \def\ProbeActual{#1}\def\ProbeExpected{dirtreex}%
+    \ProbeEqual\ProbeActual\ProbeExpected{error package}%
+    \edef\ProbeActual{#2}\ProbeEqual\ProbeActual\ProbeMessage{specific error text}%
+    \edef\ProbeActual{#3}\ProbeEqual\ProbeActual\ProbeHelp{specific help text}%
+    \ProbeInt{\dte@cnt}{\ProbeErrors}{diagnostic before increment}%
+    \global\advance\ProbeErrors by1\relax
+    \typeout{P5A ERROR \the\ProbeErrors: \ProbeActual}}
+  \ProbeExpectedError\dir\dir{outside-dir}{outside}{}
+  \ProbeRecord{1}{0}{1}{outside-dir}{outside}
+  \ProbeExpectedError\file\file{outside-file}{outside}
+  \ProbeRecord{2}{0}{0}{outside-file}{outside}
+  \ProbeExpectedError\archive\archive{outside-archive}{outside}{}
+  \ProbeRecord{3}{0}{2}{outside-archive}{outside}
+  \ProbeExpectedError\verbdir\verbdir|A_ B	%$#&^~\{}|{outside}{}
+  \ProbeRawField{4}\ProbeTab
+  \expandafter\ProbeTabCat\ProbeActual\ProbeStop
+  \ProbeExpectedError\verbfile\verbfile{A_ B%$#&^~\{}}{outside}
+  \ProbeRawField{5}\ProbeRaw
+  \ProbeExpectedError\verbarchive\verbarchive|A_ B%$#&^~\{}|{outside}{}
+  \ProbeRawField{6}\ProbeRaw
+  \ProbeInt{\dte@cnt}{6}{post-error capture count}
+  \ProbeField{4}{t}{1}\ProbeField{5}{t}{0}\ProbeField{6}{t}{2}
+\endgroup
+\ProbeInt{\ProbeErrors}{6}{all diagnostics}
+\ProbeInt{\dte@cnt}{6}{global error continuation count}
+\ProbeField{1}{n}{outside-dir}\ProbeRawField{4}\ProbeTab
+\ProbeOuterEm=1em\relax
+\noindent P5FIRST\par
+\begin{dirtreex}[box=false,pagebreak=false,fontsize=\footnotesize,
+  line color=\ProbeColor,line style=\ProbeStyle,line width=1em,elbow radius=1em]
+  \def\ProbeColor{blue}\def\ProbeStyle{dashed}\def\ProbeWidth{1em}\def\ProbeRadius{0.7pt}
+  \def\ProbeNameText{capture-name}\def\ProbeCommentText{capture-comment}\def\ProbeIconText{capture-icon}
+  \ProbeCaptureLevel=\currentgrouplevel
+  \dir[probe observe=1,line color=\ProbeColor,line style=\ProbeStyle,
+       line width=\ProbeWidth,elbow radius=\ProbeRadius,icon={\ProbeIcon}]{\ProbeName}{\ProbeComment}
+
+  {
+    \protected\def\ProbeProtectedRadius{2pt}
+    \ProbeCaptureLevel=\currentgrouplevel
+    \archive[probe observe=2,elbow radius=\ProbeProtectedRadius]{archive.zip}{archive}
+
+    {
+      \ProbeCaptureLevel=\currentgrouplevel
+      \verbdir[probe observe=3]|A_ B%$#&^~\{}|{delimited}
+
+      {
+        \ProbeCaptureLevel=\currentgrouplevel
+        \verbarchive[probe observe=4]{A_ B%$#&^~\{}}{braced}
+
+        {
+          \ProbeCaptureLevel=\currentgrouplevel
+          \file[probe observe=5]{ordinary.txt}{ordinary}
+          \ProbeCaptureLevel=\currentgrouplevel
+          \verbfile[probe observe=6]{A_ B%$#&^~\{}}{braced leaf}
+        }
+      }
+    }
+  }
+  \ProbeCaptureLevel=\currentgrouplevel
+  \verbfile[probe observe=7]|A_ B%$#&^~\{}|{delimited leaf}
+\end{dirtreex}
+\ProbeInt{\ProbeFormatted}{7}{first tree format once}
+\ProbeInt{\ProbeObserved}{7}{all option callbacks}
+\ProbeInt{\ProbeNameEffects}{1}{name once}
+\ProbeInt{\ProbeCommentEffects}{1}{comment once}
+\ProbeInt{\ProbeIconEffects}{1}{icon once}
+\begin{dirtreex}[pagebreak=false]
+  \file{P5SECOND}{ready}
+\end{dirtreex}
+\ProbeInt{\ProbeFormatted}{8}{sequential format once}
+\ProbeInt{\dte@depth}{0}{depth restored}
+\typeout{P5A CONTRACTS PASS; errors=6; callbacks=7; formatted=8; name/comment/icon=1/1/1}
+\makeatother
+\noindent P5DONE
+\end{document}

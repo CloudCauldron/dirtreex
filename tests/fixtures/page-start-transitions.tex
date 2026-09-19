@@ -1,0 +1,149 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=400pt,textwidth=280pt,textheight=180pt,centering]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\STtrees
+\newcount\STrows
+\newwrite\STnodes
+\immediate\openout\STnodes=\jobname.nodes
+\let\SToutput\dte@output@framed
+\def\dte@output@framed{%
+  \ifdim\pagegoal=\maxdimen\else\errmessage{Tree did not begin on a fresh page}\fi
+  \global\advance\STtrees by1
+  \typeout{ST-FRESH tree=\the\STtrees;goal=\the\pagegoal}%
+  \SToutput}
+\let\STformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\STrows by1
+  \protected@write\STnodes{}{ENTRY \the\dte@tnum:#1}%
+  \STformat{#1}}
+\AtEndDocument{%
+  \ifnum\STtrees=4\else\errmessage{Missing start transition}\fi
+  \ifnum\STrows=104\else\errmessage{Lost or duplicated formatting}\fi
+  \typeout{ST-ALL-CHECKS-PASSED trees=4;rows=104}}
+\makeatother
+\begin{document}
+\noindent NBPREFIX\par\newpage
+\begin{dirtreex}[box=false]
+\dir{NBROOT}{NBC000}{
+\file{NBE001}{NBC001}
+\file{NBE002}{NBC002}
+\file{NBE003}{NBC003}
+\file{NBE004}{NBC004}
+\file{NBE005}{NBC005}
+\file{NBE006}{NBC006}
+\file{NBE007}{NBC007}
+\file{NBE008}{NBC008}
+\file{NBE009}{NBC009}
+\file{NBE010}{NBC010}
+\file{NBE011}{NBC011}
+\file{NBE012}{NBC012}
+\file{NBE013}{NBC013}
+\file{NBE014}{NBC014}
+\file{NBE015}{NBC015}
+\file{NBE016}{NBC016}
+\file{NBE017}{NBC017}
+\file{NBE018}{NBC018}
+\file{NBE019}{NBC019}
+\file{NBE020}{NBC020}
+\file{NBE021}{NBC021}
+\file{NBE022}{NBC022}
+\file{NBE023}{NBC023}
+\file{NBE024}{NBC024}
+\file{NBE025}{NBC025}
+}
+\end{dirtreex}
+\noindent NFPREFIX\par\newpage
+\begin{dirtreex}[box=true]
+\dir{NFROOT}{NFC000}{
+\file{NFE001}{NFC001}
+\file{NFE002}{NFC002}
+\file{NFE003}{NFC003}
+\file{NFE004}{NFC004}
+\file{NFE005}{NFC005}
+\file{NFE006}{NFC006}
+\file{NFE007}{NFC007}
+\file{NFE008}{NFC008}
+\file{NFE009}{NFC009}
+\file{NFE010}{NFC010}
+\file{NFE011}{NFC011}
+\file{NFE012}{NFC012}
+\file{NFE013}{NFC013}
+\file{NFE014}{NFC014}
+\file{NFE015}{NFC015}
+\file{NFE016}{NFC016}
+\file{NFE017}{NFC017}
+\file{NFE018}{NFC018}
+\file{NFE019}{NFC019}
+\file{NFE020}{NFC020}
+\file{NFE021}{NFC021}
+\file{NFE022}{NFC022}
+\file{NFE023}{NFC023}
+\file{NFE024}{NFC024}
+\file{NFE025}{NFC025}
+}
+\end{dirtreex}
+\noindent CBPREFIX\par\clearpage
+\begin{dirtreex}[box=false]
+\dir{CBROOT}{CBC000}{
+\file{CBE001}{CBC001}
+\file{CBE002}{CBC002}
+\file{CBE003}{CBC003}
+\file{CBE004}{CBC004}
+\file{CBE005}{CBC005}
+\file{CBE006}{CBC006}
+\file{CBE007}{CBC007}
+\file{CBE008}{CBC008}
+\file{CBE009}{CBC009}
+\file{CBE010}{CBC010}
+\file{CBE011}{CBC011}
+\file{CBE012}{CBC012}
+\file{CBE013}{CBC013}
+\file{CBE014}{CBC014}
+\file{CBE015}{CBC015}
+\file{CBE016}{CBC016}
+\file{CBE017}{CBC017}
+\file{CBE018}{CBC018}
+\file{CBE019}{CBC019}
+\file{CBE020}{CBC020}
+\file{CBE021}{CBC021}
+\file{CBE022}{CBC022}
+\file{CBE023}{CBC023}
+\file{CBE024}{CBC024}
+\file{CBE025}{CBC025}
+}
+\end{dirtreex}
+\noindent CFPREFIX\par\clearpage
+\begin{dirtreex}[box=true]
+\dir{CFROOT}{CFC000}{
+\file{CFE001}{CFC001}
+\file{CFE002}{CFC002}
+\file{CFE003}{CFC003}
+\file{CFE004}{CFC004}
+\file{CFE005}{CFC005}
+\file{CFE006}{CFC006}
+\file{CFE007}{CFC007}
+\file{CFE008}{CFC008}
+\file{CFE009}{CFC009}
+\file{CFE010}{CFC010}
+\file{CFE011}{CFC011}
+\file{CFE012}{CFC012}
+\file{CFE013}{CFC013}
+\file{CFE014}{CFC014}
+\file{CFE015}{CFC015}
+\file{CFE016}{CFC016}
+\file{CFE017}{CFC017}
+\file{CFE018}{CFC018}
+\file{CFE019}{CFC019}
+\file{CFE020}{CFC020}
+\file{CFE021}{CFC021}
+\file{CFE022}{CFC022}
+\file{CFE023}{CFC023}
+\file{CFE024}{CFC024}
+\file{CFE025}{CFC025}
+}
+\end{dirtreex}
+\end{document}

@@ -1,0 +1,276 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=360pt,left=25pt,right=25pt,top=25pt,bottom=35pt]{geometry}\setlength\columnsep{20pt}
+\usepackage{dirtreex}
+\usepackage{etoolbox}
+\pagestyle{empty}
+\makeatletter
+\newif\ifStyleInline
+\StyleInlinetrue
+\newif\ifStyleTF
+\newcount\StyleFormatted
+\newwrite\StyleNodes
+\newwrite\StyleEffects
+\immediate\openout\StyleNodes=\jobname.nodes
+\immediate\openout\StyleEffects=\jobname.effects
+\def\StylePath{none}
+\def\StyleSide{}
+\@for\StyleCounter:=sharp,rounded,own-upper,own-lower,ancestor,top-active,top-feed,bottom-active,bottom-feed\do{%
+  \expandafter\newcount\csname StyleCount@\StyleCounter\endcsname}
+\@for\StyleCounter:=envA,envB,entryA,entryB\do{%
+  \expandafter\newcount\csname StyleProfile@\StyleCounter\endcsname}
+\@for\StyleCounter:=first,middle,last\do{%
+  \expandafter\newcount\csname StylePiece@\StyleCounter\endcsname}
+\long\def\StyleChoice#1#2{%
+  \ifStyleInline\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi{#1}{#2}}
+\long\def\StyleChooseTF#1#2{%
+  \ifStyleTF\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi{#1}{#2}}
+\def\StylePayload{before}
+\def\StyleTokens{frozen}
+\protected\def\StyleProtectedPayload#1{\StyleCheckValue{#1}}
+\def\StyleCheckValue#1{%
+  \edef\StyleSeen{#1}%
+  \ifx\StyleSeen\StyleExpected\else
+    \PackageError{style-test}{Payload evaluated at the wrong time}{Preserve PGF key order and entry capture binding.}%
+  \fi}
+\tikzset{
+ p3/profile/.code 2 args={%
+   \def\StyleKind{#1}\def\StyleEnvKind{env}%
+   \ifx\StyleKind\StyleEnvKind
+     \def\StyleExpected{after}\def\StyleExpectedTokens{\StyleTokens}%
+   \else
+     \def\StyleExpected{before}\def\StyleExpectedTokens{frozen}%
+   \fi
+   \ifx\StyleSide\@empty\else
+     \ifnum\dte@k>\dte@eget{\StyleCutIndex}{d}\relax
+       \edef\StylePath{\StyleSide-feed}%
+     \else
+       \edef\StylePath{\StyleSide-active}%
+     \fi
+   \fi
+   \global\advance\csname StyleProfile@#1#2\endcsname by1\relax
+   \global\advance\csname StyleCount@\StylePath\endcsname by1\relax
+   \protected@write\StyleEffects{}{STYLE \StylePath/#1#2}},
+ p3/set/.code={\def\StylePayload{after}},
+ p3/value/.code={\StyleCheckValue{#1}},
+ p3/tokens/.code={%
+   \def\StyleSeenTokens{#1}%
+   \ifx\StyleSeenTokens\StyleExpectedTokens\else
+     \PackageError{style-test}{Braced payload tokens changed}{Do not fully expand the stored option list.}%
+   \fi},
+ p3/pair/.code={%
+   \def\StylePair{#1}\def\StyleExpectedPair{tag{left,right}}%
+   \ifx\StylePair\StyleExpectedPair\else
+     \PackageError{style-test}{Braced comma value changed}{Preserve inner value braces.}%
+   \fi},
+ p3/run/.code={#1}
+}
+\tikzset{p3-envA/.style={p3/profile={env}{A},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 4pt off 2pt},dash phase=1pt,draw opacity=0.8}}
+\def\StyleEnvA{\StyleChoice{p3/profile={env}{A},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 4pt off 2pt},dash phase=1pt,draw opacity=0.8}{p3-envA}}
+\tikzset{p3-envB/.style={p3/profile={env}{B},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 3pt off 2pt},dash phase=1pt,draw opacity=0.8}}
+\def\StyleEnvB{\StyleChoice{p3/profile={env}{B},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 3pt off 2pt},dash phase=1pt,draw opacity=0.8}{p3-envB}}
+\tikzset{p3-entryA/.style={p3/profile={entry}{A},{p3/set},p3/value={before},p3/tokens={frozen},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{before}},dash pattern={on 2pt off 2pt},dash phase=1pt,draw opacity=0.8}}
+\def\StyleEntryA{\StyleChoice{p3/profile={entry}{A},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 2pt off 2pt},dash phase=1pt,draw opacity=0.8}{p3-entryA}}
+\tikzset{p3-entryB/.style={p3/profile={entry}{B},{p3/set},p3/value={before},p3/tokens={frozen},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{before}},dash pattern={on 5pt off 2pt},dash phase=1pt,draw opacity=0.8}}
+\def\StyleEntryB{\StyleChoice{p3/profile={entry}{B},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on 5pt off 2pt},dash phase=1pt,draw opacity=0.8}{p3-entryB}}
+\def\StyleEnvCurrent{\StyleEnvA}
+\def\StyleEntryCurrent{\StyleEntryA}
+\def\StyleSpaceA{\StyleChoice{ \StyleSpaceB }{\StyleSpaceB}}
+\def\StyleSpaceB{\StyleChoice{ \StyleEnvCurrent }{\StyleEnvCurrent}}
+\def\StyleEntryAlias{\StyleEntryCurrent}
+\protected\def\StyleProtectedHead{\StyleEnvCurrent}
+\def\StyleEmpty{}
+\def\StyleSafeTF{\StyleChooseTF{\StyleEnvA}{\StyleEnvB}}
+\def\StyleParameter#1{\StyleChoice{p3/profile={env}{B},{p3/set},p3/value={\StylePayload},p3/tokens={\StyleTokens},p3/pair={tag{left,right}},p3/run={\StyleProtectedPayload{\StylePayload}},dash pattern={on #1 off 2pt},dash phase=1pt,draw opacity=0.8}{p3-envB}}
+\def\StyleConditionalTrue{\iftrue p3-envA\else p3-envB\fi}
+\def\StyleConditionalFalse{\iffalse p3-envA\else p3-envB\fi}
+\let\StyleOriginalName\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\StyleFormatted by1
+  \protected@write\StyleNodes{}{ENTRY \the\dte@tnum:#1}%
+  \StyleOriginalName{#1}}
+\let\StyleOriginalSharp\dte@connector@sharp
+\def\dte@connector@sharp{\def\StylePath{sharp}\StyleOriginalSharp}
+\let\StyleOriginalRounded\dte@connector@rounded
+\def\dte@connector@rounded{\def\StylePath{rounded}\StyleOriginalRounded}
+\let\StyleOriginalVert\dte@drawvert
+\def\dte@drawvert#1#2#3#4#5#6{%
+  \ifnum\dte@k=\dte@ownd\relax
+    \ifdim#1>0pt \def\StylePath{own-upper}\else\def\StylePath{own-lower}\fi
+  \else\def\StylePath{ancestor}\fi
+  \StyleOriginalVert{#1}{#2}{#3}{#4}{#5}{#6}}
+% Both private loop layouts expose the same boundary side and cut index.
+\ifdefined\dte@foreach@owner
+  \patchcmd{\dte@drawpiece}{\dte@foreach@owner\dte@prevbk\dte@draw@topcolumn}
+    {\def\StyleSide{top}%
+     \edef\StyleCutIndex{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+     \dte@foreach@owner\dte@prevbk\dte@draw@topcolumn}
+    {}{\errmessage{Cannot observe top boundary}}
+  \patchcmd{\dte@drawpiece}{\dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn}
+    {\def\StyleSide{bottom}%
+     \edef\StyleCutIndex{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+     \dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn}
+    {}{\errmessage{Cannot observe bottom boundary}}
+\else
+  \patchcmd{\dte@drawpiece}{\@for\dte@extlvl:=\dte@prevbk\do}
+    {\def\StyleSide{top}%
+     \edef\StyleCutIndex{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+     \@for\dte@extlvl:=\dte@prevbk\do}
+    {}{\errmessage{Cannot observe top boundary}}
+  \patchcmd{\dte@drawpiece}{\@for\dte@extlvl:=\dte@curbk\do}
+    {\def\StyleSide{bottom}%
+     \edef\StyleCutIndex{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+     \@for\dte@extlvl:=\dte@curbk\do}
+    {}{\errmessage{Cannot observe bottom boundary}}
+\fi
+\let\StyleOriginalPiece\dte@drawpiece
+\def\dte@drawpiece#1{%
+  \global\advance\csname StylePiece@#1\endcsname by1\relax
+  \StyleOriginalPiece{#1}}
+\def\StyleRequire#1{%
+  \ifnum\csname StyleCount@#1\endcsname>0\else
+    \PackageError{style-test}{Missing style path #1}{The matrix must exercise this renderer path.}%
+  \fi}
+\def\StyleCheckMainBinding{%
+  \ifnum\StyleProfile@envA=0\else\errmessage{Environment style bound too early}\fi
+  \ifnum\StyleProfile@envB>0\else\errmessage{Late environment style was not applied}\fi
+  \ifnum\StyleProfile@entryA>0\else\errmessage{Captured entry style was not applied}\fi
+  \ifnum\StyleProfile@entryB=0\else\errmessage{Entry style bound too late}\fi}
+\AtEndDocument{%
+  \ifnum\StyleFormatted=61\relax\else
+    \PackageError{style-test}{Entry formatting count changed}{All entries must be formatted once.}%
+  \fi
+  \ifdte@needrerun
+    \typeout{STYLE-COVERAGE-PENDING}%
+  \else
+    \@for\StyleCounter:=sharp,rounded,own-upper,own-lower,ancestor,top-active,top-feed,bottom-active,bottom-feed\do{\expandafter\StyleRequire\expandafter{\StyleCounter}}%
+    \@for\StyleCounter:=first,middle,last\do{%
+      \ifnum\csname StylePiece@\StyleCounter\endcsname>0\else
+        \PackageError{style-test}{Missing piece \StyleCounter}{Require first, middle and last pictures.}%
+      \fi}
+    \typeout{STYLE-MATRIX-PASSED}%
+  \fi
+  \@for\StyleCounter:=sharp,rounded,own-upper,own-lower,ancestor,top-active,top-feed,bottom-active,bottom-feed\do{%
+    \typeout{STYLE-PATH-\StyleCounter=\the\csname StyleCount@\StyleCounter\endcsname}}
+  \@for\StyleCounter:=first,middle,last\do{%
+    \typeout{STYLE-PIECE-\StyleCounter=\the\csname StylePiece@\StyleCounter\endcsname}}
+  \typeout{STYLE-FORMATTED=\the\StyleFormatted}}
+\makeatother
+\begin{document}
+LEFTSEED\par\newpage
+Preceding text establishes the current column.\par\vspace*{215pt}
+
+\tikz{\draw[dash pattern={on 3pt off 2pt},dash phase=1pt] (0,0)--(1,0);}
+\typeout{STYLE-DIRECT-PASSED}
+\begin{dirtreex}[box=true,line style=\StyleSpaceA]
+\dir{MR000}{MC000A\\MC000B}{
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR001}{MC001}{
+\file[line style={}]{MR002}{MC002}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR003}{MC003}
+\dir[line style=solid]{MR004}{MC004}{
+\file[line style=\StyleEntryAlias]{MR005}{MC005}
+\file[line style=solid]{MR006}{MC006}
+}
+\file[line style=p3-envB]{MR007}{MC007}
+}
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR008}{MC008}{
+\file[line style={}]{MR009}{MC009}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR010}{MC010}
+\dir[line style=solid]{MR011}{MC011}{
+\file[line style=\StyleEntryAlias]{MR012}{MC012}
+\file[line style=solid]{MR013}{MC013}
+}
+\file[line style=p3-envB]{MR014}{MC014}
+}
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR015}{MC015}{
+\file[line style={}]{MR016}{MC016}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR017}{MC017}
+\dir[line style=solid]{MR018}{MC018}{
+\file[line style=\StyleEntryAlias]{MR019}{MC019}
+\file[line style=solid]{MR020}{MC020}
+}
+\file[line style=p3-envB]{MR021}{MC021}
+}
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR022}{MC022}{
+\file[line style={}]{MR023}{MC023}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR024}{MC024}
+\dir[line style=solid]{MR025}{MC025}{
+\file[line style=\StyleEntryAlias]{MR026}{MC026}
+\file[line style=solid]{MR027}{MC027}
+}
+\file[line style=p3-envB]{MR028}{MC028}
+}
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR029}{MC029}{
+\file[line style={}]{MR030}{MC030}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR031}{MC031}
+\dir[line style=solid]{MR032}{MC032}{
+\file[line style=\StyleEntryAlias]{MR033}{MC033}
+\file[line style=solid]{MR034}{MC034}
+}
+\file[line style=p3-envB]{MR035}{MC035}
+}
+\dir[line style=\StyleEntryAlias,elbow radius=2pt]{MR036}{MC036}{
+\file[line style={}]{MR037}{MC037}
+\file[line style={\StyleChoice{\StyleProtectedHead}{p3-envB}},elbow radius=2pt]{MR038}{MC038}
+\dir[line style=solid]{MR039}{MC039}{
+\file[line style=\StyleEntryAlias]{MR040}{MC040}
+\file[line style=solid]{MR041}{MC041}
+}
+\file[line style=p3-envB]{MR042}{MC042}
+}
+}
+\gdef\StyleEnvCurrent{\StyleEnvB}
+\gdef\StyleEntryCurrent{\StyleEntryB}
+\end{dirtreex}
+\StyleCheckMainBinding
+\clearpage
+\StyleTFtrue
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleParameter{3pt}}]
+\dir{PR000}{PC000}{
+\file[line style={}]{PR001}{PC001}
+\file{PR002}{PC002}
+}
+\end{dirtreex}
+\clearpage
+\StyleTFtrue
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleSafeTF}]
+\dir{TR000}{TC000}{
+\file[line style={}]{TR001}{TC001}
+\file{TR002}{TC002}
+}
+\end{dirtreex}
+\clearpage
+\StyleTFfalse
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleSafeTF}]
+\dir{FR000}{FC000}{
+\file[line style={}]{FR001}{FC001}
+\file{FR002}{FC002}
+}
+\end{dirtreex}
+\clearpage
+
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleConditionalTrue}]
+\dir{NR000}{NC000}{
+\file[line style={}]{NR001}{NC001}
+\file{NR002}{NC002}
+}
+\end{dirtreex}
+\clearpage
+
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleConditionalFalse}]
+\dir{QR000}{QC000}{
+\file[line style={}]{QR001}{QC001}
+\file{QR002}{QC002}
+}
+\end{dirtreex}
+\clearpage
+
+\begin{dirtreex}[pagebreak=false,box=true,line style={\StyleEmpty}]
+\dir{ZR000}{ZC000}{
+\file[line style={}]{ZR001}{ZC001}
+\file{ZR002}{ZC002}
+}
+\end{dirtreex}
+\clearpage
+\end{document}

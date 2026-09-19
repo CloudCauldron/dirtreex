@@ -1,0 +1,57 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{dirtreex}
+\newlength\ProbeLength
+\def\ProbeColor{red}
+\def\ProbeName{\textbf{ordinary}}
+\def\ProbeComment{\textit{kept token}}
+\makeatletter
+\begingroup
+  \def\PackageError#1#2#3{\typeout{PROBE EXPECTED: #2}}
+  \dte@parsefour{1pt,2pt}\ProbeA\ProbeB\ProbeC\ProbeD
+  \setlength{\ProbeLength}{\ProbeA}
+  \typeout{PROBE FOUR-RECOVERY: \the\ProbeLength}
+  \dte@parsetwo{1pt,2pt,3pt}\ProbeA\ProbeB
+  \setlength{\ProbeLength}{\ProbeA}
+  \typeout{PROBE TWO-RECOVERY: \the\ProbeLength}
+\endgroup
+\let\ProbeOriginalPreprocess\dte@preprocess
+\def\dte@preprocess{%
+  \typeout{PROBE COUNT: \the\dte@cnt}%
+  \typeout{PROBE ENV-COLOR-MEANING: \meaning\dte@linecolor}%
+  \typeout{PROBE ENV-WIDTH: \the\dte@rulewidth}%
+  \dte@i=1\relax
+  \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+    \typeout{PROBE ENTRY: \the\dte@i, DEPTH \dte@eget{\the\dte@i}{d}, TYPE \dte@eget{\the\dte@i}{t}}%
+    \typeout{PROBE NAME: \expandafter\meaning\csname dte@e\the\dte@i n\endcsname}%
+    \typeout{PROBE COMMENT: \expandafter\meaning\csname dte@e\the\dte@i c\endcsname}%
+    \typeout{PROBE COLOR: \expandafter\meaning\csname dte@e\the\dte@i lc\endcsname}%
+    \typeout{PROBE WIDTH: \expandafter\meaning\csname dte@e\the\dte@i lw\endcsname}%
+    \typeout{PROBE ICON: \expandafter\meaning\csname dte@e\the\dte@i i\endcsname}%
+    \advance\dte@i by1\relax
+  \repeat
+  \ProbeOriginalPreprocess
+}
+\let\ProbeOriginalFormatter\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \ifnum#1=3\relax
+    \typeout{PROBE ENTRY-WIDTH-AT-RENDER: \the\dimexpr\dte@eget{3}{lw}\relax}%
+  \fi
+  \ProbeOriginalFormatter{#1}%
+}
+\makeatother
+\begin{document}
+\begin{dirtreex}[line color=\ProbeColor,line width=1em,fontsize=\footnotesize,pagebreak=false]
+  \verbdir|root_%$#&^~\{}|{root}{
+    \dir{\ProbeName}{\ProbeComment}
+
+    {
+      \file[line color=\ProbeColor,line width=1em,icon={\textcolor{blue}{[F]}}]{plain.txt}{\ProbeComment}
+    }
+    \archive{archive.zip}{}{\verbfile|a_b%$#&^~\{}|{verbatim}}
+    \verbarchive|v_%$#.zip|{}{\file{last.txt}{}}
+    \verbfile|final name.txt|{final}
+  }
+  \gdef\ProbeColor{blue}
+\end{dirtreex}
+\end{document}

@@ -1,0 +1,195 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=360pt,paperheight=320pt,textwidth=280pt,textheight=220pt,top=40pt,left=40pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+% A narrow real-path probe: no production helper is stubbed or patched.
+% Group level distinguishes the measurement wrapper from nested content.
+\newif\ifHCactive
+\newif\ifHCwholeflag
+\newif\ifHCfirstflag
+\newif\ifHCdirectflag
+\newif\ifHCmultitrial
+\newcount\HCfresh
+\newcount\HCwhole
+\newcount\HCfirst
+\newcount\HCdirect
+\newcount\HCordinary
+\newcount\HCwrap
+\newcount\HCnested
+\newcount\HClevel
+\newcount\HCfittrials
+\newcount\HCfitcalls
+\def\HCerror#1{\PackageError{integration-wrapper-hooks}{#1}{Wrapper and nested hook contracts must be preserved.}}
+\protected\def\HChook#1{%
+  \ifHCactive
+    \def\HCseen{#1}%
+    \ifx\HCseen\HCstamp\else\HCerror{Hook tokens expanded before box entry}\fi
+    \ifnum\currentgrouplevel=\HClevel
+      \global\advance\HCwrap by1
+    \else
+      \global\advance\HCnested by1
+    \fi
+  \fi}
+% This expandable indirection is changed AFTER suppression was installed.
+% An eager edef capture would freeze dormant and fail the armed assertion.
+\def\HClate{\HChook{dormant}}
+\everyhbox\expandafter{\the\everyhbox\HClate}
+\def\HCbegin#1#2{%
+  \ifHCactive\HCerror{Unexpected recursive measurement probe}\fi
+  \def\HCkind{#1}\def\HCexpected{#2}\def\HCstamp{armed}%
+  \global\advance\csname HC#1\endcsname by1
+  \HClevel=\currentgrouplevel \advance\HClevel by1
+  \global\HCwrap=0 \global\HCnested=0
+  \HCactivetrue
+  \def\HClate{\HChook{armed}}}
+\def\HCend{%
+  \HCactivefalse
+  \ifnum\HCwrap=\HCexpected\relax\else
+    \HCerror{Wrong wrapper count on \HCkind}\fi
+  \ifnum\HCnested>0\else\HCerror{Nested hooks suppressed on \HCkind}\fi
+  \typeout{HC-TRIAL \HCkind: wrapper=\the\HCwrap;nested=\the\HCnested}%
+  \def\HClate{\HChook{dormant}}}
+\def\HCrestored#1{%
+  \edef\HCafter{\the\everyhbox}%
+  \ifx#1\HCafter\else\HCerror{Outer everyhbox was not restored}\fi}
+\let\HCorigwhole\dte@check@wholefirst
+\def\dte@check@wholefirst{%
+  \edef\HCsavewhole{\the\everyhbox}%
+  \HCwholeflagtrue
+  \HCorigwhole
+  \HCwholeflagfalse
+  \HCrestored\HCsavewhole}
+\let\HCorigfit\dte@dosplit@first@fit
+\def\dte@dosplit@first@fit{%
+  \edef\HCsavefit{\the\everyhbox}%
+  \global\HCfittrials=0
+  \global\advance\HCfitcalls by1
+  \HCfirstflagtrue
+  \HCorigfit
+  \HCfirstflagfalse
+  \ifnum\HCfittrials>1\global\HCmultitrialtrue\fi
+  \HCrestored\HCsavefit
+  \typeout{HC-FIRST-LOOP trials=\the\HCfittrials}}
+\let\HCorigdirect\dte@measure@direct
+\def\dte@measure@direct#1{%
+  \edef\HCsavedirect{\the\everyhbox}%
+  \HCdirectflagtrue
+  \HCorigdirect{#1}%
+  \HCdirectflagfalse
+  \HCrestored\HCsavedirect}
+\let\HCorigsingle\dte@box@single
+\def\dte@box@single#1#2{%
+  \ifHCwholeflag
+    \HCbegin{whole}{0}%
+  \else
+    \ifHCfirstflag
+      \global\advance\HCfittrials by1
+      \HCbegin{first}{0}%
+    \else
+      \HCbegin{fresh}{1}%
+    \fi
+  \fi
+  \HCorigsingle#1#2%
+  \HCend}
+\let\HCorigpiece\dte@measurepiece
+\def\dte@measurepiece#1{%
+  \ifnum\dte@pagecount=0
+    \global\advance\HCfittrials by1
+    \HCbegin{first}{0}%
+  \else
+    \ifHCdirectflag
+      \HCbegin{direct}{0}%
+    \else
+      \HCbegin{ordinary}{1}%
+    \fi
+  \fi
+  \HCorigpiece{#1}%
+  \HCend}
+\def\HCpositive#1{\ifnum#1>0\else\HCerror{Missing required call-site coverage}\fi}
+\AtEndDocument{%
+  \HCpositive\HCfresh \HCpositive\HCwhole \HCpositive\HCfirst
+  \HCpositive\HCdirect \HCpositive\HCordinary
+  \ifHCmultitrial\else\HCerror{No first loop tried multiple pictures}\fi
+  \ifnum\HCfitcalls=1\else\HCerror{Unexpected first-fit restart or extra first fit}\fi
+  \typeout{HC-COVERAGE fresh=\the\HCfresh;whole=\the\HCwhole;first=\the\HCfirst;direct=\the\HCdirect;ordinary=\the\HCordinary}%
+  \typeout{HC-ALL-CHECKS-PASSED}}
+\makeatother
+\begin{document}
+% A fresh whole picture retains its historical wrapper hook.
+\begin{dirtreex}
+\dir{FRESHROOT}{}{\file{FRESHONE}{}\file{FRESHTWO}{}}
+\end{dirtreex}
+\clearpage
+% A fitting whole picture on a used page enters check@wholefirst's shim.
+\noindent USED PAGE PREFIX\par
+\begin{dirtreex}
+\dir{USEDROOT}{}{\file{USEDONE}{}\file{USEDTWO}{}}
+\end{dirtreex}
+\clearpage
+\begingroup
+% Real picture extent forces multiple trials of the first fitted prefix.
+% Full continuation columns then use direct measurement; the closing
+% continuation uses the ordinary fitter with its wrapper hook intact.
+\makeatletter
+\tikzset{every picture/.append style={execute at end picture={%
+  \ifdefined\dte@piecetype
+    \ifx\dte@piecetype\dte@pfirst
+      \path (current bounding box.south west) ++(0,-35pt);
+    \fi
+  \fi}}}
+\makeatother
+\noindent SPLIT PAGE PREFIX\par
+\begin{dirtreex}
+\dir{SPLITROOT}{}{
+\file{SPLIT01}{}
+\file{SPLIT02}{}
+\file{SPLIT03}{}
+\file{SPLIT04}{}
+\file{SPLIT05}{}
+\file{SPLIT06}{}
+\file{SPLIT07}{}
+\file{SPLIT08}{}
+\file{SPLIT09}{}
+\file{SPLIT10}{}
+\file{SPLIT11}{}
+\file{SPLIT12}{}
+\file{SPLIT13}{}
+\file{SPLIT14}{}
+\file{SPLIT15}{}
+\file{SPLIT16}{}
+\file{SPLIT17}{}
+\file{SPLIT18}{}
+\file{SPLIT19}{}
+\file{SPLIT20}{}
+\file{SPLIT21}{}
+\file{SPLIT22}{}
+\file{SPLIT23}{}
+\file{SPLIT24}{}
+\file{SPLIT25}{}
+\file{SPLIT26}{}
+\file{SPLIT27}{}
+\file{SPLIT28}{}
+\file{SPLIT29}{}
+\file{SPLIT30}{}
+\file{SPLIT31}{}
+\file{SPLIT32}{}
+\file{SPLIT33}{}
+\file{SPLIT34}{}
+\file{SPLIT35}{}
+\file{SPLIT36}{}
+\file{SPLIT37}{}
+\file{SPLIT38}{}
+\file{SPLIT39}{}
+\file{SPLIT40}{}
+\file{SPLIT41}{}
+\file{SPLIT42}{}
+\file{SPLIT43}{}
+\file{SPLIT44}{}
+\file{SPLIT45}{}
+\file{SPLIT46}{}
+}\end{dirtreex}
+\endgroup
+\end{document}

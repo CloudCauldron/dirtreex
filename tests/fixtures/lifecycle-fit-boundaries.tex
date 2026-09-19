@@ -1,0 +1,78 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=100pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+\makeatletter
+\newcount\BPformatted
+\newcount\BPcases
+\newdimen\BPdelta
+\newdimen\BPbody
+\newdimen\BPpadding
+\newwrite\BPnodes
+\immediate\openout\BPnodes=\jobname.nodes
+\def\BPerror#1{\PackageError{lifecycle-fit-boundaries}{#1}{Whole versus split output must respect the exact physical boundary.}}
+\let\BPformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\BPformatted by1
+  \protected@write\BPnodes{}{ENTRY \BPcase:#1}%
+  \BPformat{#1}}
+\let\BPsingle\dte@box@single
+\def\dte@box@single#1#2{%
+  \BPsingle#1#2%
+  \ifx#2\dte@framebox
+    \ifdim\dimexpr\ht#1+\dp#1-\BPbody\relax=\BPdelta\else
+      \BPerror{Framed whole height is not at the declared boundary}\fi
+    \typeout{BP-WHOLE case=\BPcase;charge=\number\dimexpr\ht#1+\dp#1\relax;room=\number\BPbody;delta=\number\BPdelta}%
+  \fi}
+\let\BPoutput\dte@output@breakable
+\def\dte@output@breakable{%
+  \ifdim\textheight=\BPbody\else\BPerror{Unexpected text height}\fi
+  \ifdim\vsize=\BPbody\else\BPerror{Unexpected physical page capacity}\fi
+  \ifdim\pagegoal=\maxdimen\else\BPerror{Boundary case did not start on a fresh page}\fi
+  \ifdte@showbox\else
+    \ifdim\dimexpr\ht\dte@framebox-\BPbody\relax=\BPdelta\else
+      \BPerror{Bare whole height is not at the declared boundary}\fi
+    \ifdim\dp\dte@framebox>\maxdepth\BPerror{Bare depth exceeds the permitted final depth}\fi
+    \typeout{BP-WHOLE case=\BPcase;charge=\number\ht\dte@framebox;room=\number\BPbody;delta=\number\BPdelta}%
+  \fi
+  \BPoutput}
+\def\BPbegin#1{\begin{dirtreex}[#1]}
+\def\BPtree#1{%
+  \expandafter\BPbegin\expandafter{\BPoptions}
+  \dir{#1ROOT}{#1C0}{\file{#1A}{#1C1}\file{#1B}{#1C2}\file{#1C}{#1C3}}
+  \end{dirtreex}}
+\def\BPcasecheck{%
+  \ifdim\BPdelta>0pt
+    \ifnum\dte@piecenum=2\else\BPerror{Oversized whole tree did not split into two pieces}\fi
+  \else
+    \ifnum\dte@piecenum=0\else\BPerror{A fitting whole tree was split}\fi
+  \fi
+  \global\advance\BPcases by1
+  \typeout{BP-ROUTE case=\BPcase;delta=\number\BPdelta;pieces=\the\dte@piecenum}}
+\def\BPframed#1#2{%
+  \clearpage
+  \def\BPcase{#1}\BPdelta=#2sp\relax
+  \BPbody=100pt
+  \BPpadding=\dimexpr100pt-44pt-6pt-.4pt+\BPdelta\relax
+  \edef\BPoptions{box={margin={6pt,6pt,\the\BPpadding,6pt}},fontsize={\noexpand\fontsize{9}{11}\noexpand\selectfont}}%
+  \BPtree{#1}\BPcasecheck}
+\def\BPbare#1#2{%
+  \clearpage
+  \def\BPcase{#1}\BPdelta=#2sp\relax
+  \BPbody=\dimexpr44pt-.3\dimexpr11pt\relax-\BPdelta\relax
+  \newgeometry{textwidth=310pt,textheight=\the\BPbody,top=42pt}
+  \def\BPoptions{box=false,fontsize={\fontsize{9}{11}\selectfont}}%
+  \BPtree{#1}\BPcasecheck}
+\AtEndDocument{%
+  \ifnum\BPformatted=24\else\BPerror{Rows were lost or formatted repeatedly}\fi
+  \ifnum\BPcases=6\else\BPerror{Missing boundary case}\fi
+  \typeout{BP-ALL-CHECKS-PASSED cases=6;rows=24}}
+\makeatother
+\begin{document}
+\BPframed{FL}{-1}
+\BPframed{FE}{0}
+\BPframed{FG}{1}
+\BPbare{BL}{-1}
+\BPbare{BE}{0}
+\BPbare{BG}{1}
+\end{document}

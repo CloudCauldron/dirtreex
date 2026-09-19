@@ -1,0 +1,45 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=210pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+
+\makeatletter
+\newcount\audit@tries
+\let\audit@drawpiece\dte@drawpiece
+\def\dte@drawpiece#1{%
+  \global\advance\audit@tries by1
+  \ifnum\audit@tries>1000 \errmessage{AUDIT retry limit}\fi
+  \typeout{AUDIT TRIAL type=#1; split=\the\ht\dte@splitresult+\the\dp\dte@splitresult; remainder=\ifvoid\dte@extbox VOID\else NONVOID\fi,\the\ht\dte@extbox+\the\dp\dte@extbox; avail=\the\dte@availht; capacity=\the\dte@fitroom; min=\dte@minht}%
+  \begingroup
+  \edef\audit@next{\endgroup\noexpand\audit@drawpiece{#1}\noexpand\write16{AUDIT SHIP type=#1; split=\the\ht\dte@splitresult+\the\dp\dte@splitresult; avail=\the\dte@availht; capacity=\the\dte@fitroom}}%
+  \audit@next
+}
+\let\audit@measureheight\dte@measureheight
+\def\dte@measureheight#1{\audit@measureheight#1\typeout{AUDIT MEASURE type=\dte@piecetype; physical=\the\ht\dte@tbox+\the\dp\dte@tbox; charged=\the\dte@fitht; capacity=\the\dte@fitroom}}
+\makeatother
+
+\pagestyle{empty}\raggedbottom
+\AddToHook{para/before}{\vskip0pt minus 2pt\relax}
+\begin{document}
+\begin{dirtreex}[box=false]
+\dir{ROOT}{Root}{
+\file{E001}{C001L1}
+\file{E002}{C002L1}
+\file{E003}{C003L1}
+\file{E004}{C004L1}
+\file{E005}{C005L1}
+\file{E006}{C006L1}
+\file{E007}{C007L1}
+\file{E008}{C008L1}
+\file{E009}{C009L1}
+\file{E010}{C010L1}
+\file{E011}{C011L1}
+\file{E012}{C012L1}
+\file{E013}{C013L1}
+\file{E014}{C014L1}
+\file{E015}{C015L1}
+\file{E016}{C016L1}
+\file{E017}{C017L1}
+\file{E018}{C018L1}
+\file{E019}{C019L1}
+}\end{dirtreex}
+\end{document}

@@ -1,0 +1,101 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=400pt,textwidth=280pt,textheight=180pt,centering]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\newwrite\Aentries
+\immediate\openout\Aentries=\jobname.nodes
+\newcount\Aformatted
+\newcount\Aparruns
+\let\Aformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{\global\advance\Aformatted by1\write\Aentries{ENTRY #1}\Aformat{#1}}
+\makeatletter
+\let\Askip\dte@skipcolumn
+\newcount\Askips
+\def\dte@skipcolumn{%
+  \global\advance\Askips by1
+  \typeout{AUDIT-SKIP \the\Askips;page=\thepage;goal=\the\pagegoal;total=\the\pagetotal;avail=\the\dte@availht;min=\dte@minht}%
+
+  \Askip}
+\let\Amin\dte@compute@minht
+\def\dte@compute@minht{\Amin\typeout{AUDIT-MIN total=\dte@minht;depth=\the\dte@tempdim}}
+\let\Apiece\dte@drawpiece
+\def\dte@drawpiece#1{\typeout{AUDIT-PIECE #1;page=\thepage;ht=\the\ht\dte@splitresult;dp=\the\dp\dte@splitresult}\Apiece{#1}}
+\AtEndDocument{\typeout{AUDIT-PARRUNS \the\Aparruns}\typeout{AUDIT-FORMATTED \the\Aformatted}\typeout{AUDIT-PIECES \the\dte@piecenum}}
+\makeatother
+\AddToHook{shipout/before}{}
+\AddToHook{para/before}{\ifinner\else\ifvmode\ifnum\value{page}>0\relax\global\advance\Aparruns by1\relax\typeout{AUDIT-PAR \the\Aparruns;page=\thepage}\hrule height150pt\relax\fi\fi\fi}
+
+\makeatletter
+\@ifundefined{dte@check@progress}{}{%
+  \let\AuditCheck\dte@check@progress
+  \def\dte@check@progress#1#2{%
+    \typeout{AUDIT-CHECK #1; deficit=\the\dimexpr#2\relax; goal=\the\pagegoal; vsize=\the\vsize; total=\the\pagetotal}%
+    \AuditCheck{#1}{#2}%
+    \typeout{AUDIT-RESULT room=\meaning\dte@retryroom; stop=\if@tempswa YES\else NO\fi}%
+  }}
+\makeatother
+
+
+\newcount\Abegincount
+\newcount\Aendcount
+\newwrite\Abegin
+\immediate\openout\Abegin=\jobname.begin
+\AddToHook{para/begin}{\ifinner\else
+\global\advance\Abegincount by1\relax
+\strut
+\fi}
+\AddToHook{para/end}{\ifinner\else\global\advance\Aendcount by1\relax\fi}
+\AtEndDocument{\typeout{RESUME-BEGINCOUNT \the\Abegincount}\typeout{RESUME-ENDCOUNT \the\Aendcount}}
+
+\makeatletter
+\let\AuditResumeSkip\dte@skipcolumn
+\def\AuditResumeState#1{%
+  \edef\AuditResumeInfo{mode=\ifhmode H\else V\fi;node=\the\lastnodetype;shape=\the\parshape;hang=\the\hangindent;after=\the\hangafter}%
+  \typeout{RESUME-#1 \AuditResumeInfo}}
+\def\dte@skipcolumn{%
+  \AuditResumeState{PRE}%
+  \AuditResumeSkip
+  \AuditResumeState{POST}%
+}
+\makeatother
+
+
+\makeatletter
+\ifcsname dte@check@defer\endcsname
+  \let\DGcheck\dte@check@defer
+  \def\dte@check@defer{%
+    \typeout{DG-DEFER attempt=\the\numexpr\dte@defercount+1\relax;piece=\the\dte@pagecount;tree=\the\dte@tnum}%
+    \DGcheck}
+\fi
+\makeatother
+
+\begin{document}
+
+\begin{dirtreex}[box=true,pagebreak=true,box={border color=red},line color=blue]
+\dir{E000}{ROOT001\\ROOT002\\ROOT003\\ROOT004\\ROOT005\\ROOT006\\ROOT007\\ROOT008\\ROOT009\\ROOT010\\ROOT011\\ROOT012\\ROOT013\\ROOT014}{
+\file{E001}{C001}
+\file{E002}{C002}
+\file{E003}{C003}
+\file{E004}{C004}
+\file{E005}{C005}
+\file{E006}{C006}
+\file{E007}{C007}
+\file{E008}{C008}
+\file{E009}{C009}
+\file{E010}{C010}
+\file{E011}{C011}
+\file{E012}{C012}
+\file{E013}{C013}
+\file{E014}{C014}
+\file{E015}{C015}
+\file{E016}{C016}
+\file{E017}{C017}
+\file{E018}{C018}
+\file{E019}{C019}
+\file{E020}{C020}
+}
+\end{dirtreex}
+AFTER.
+\end{document}

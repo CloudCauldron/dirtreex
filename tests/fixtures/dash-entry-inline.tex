@@ -1,0 +1,14 @@
+\documentclass{article}
+\usepackage{dirtreex}
+\tikzset{probe dash/.style={dash pattern=on 3pt off 2pt}}
+\begin{document}
+\tikz{\draw[dash pattern=on 3pt off 2pt] (0,0)--(1,0);}
+\typeout{DASH DIRECT-TIKZ-PASSED}
+\begin{dirtreex}[pagebreak=false,elbow radius=2pt]
+  \dir{root}{}{
+    \file[line style={dash pattern=on 3pt off 2pt}]{alpha}{}
+    \file{beta}{}
+  }
+\end{dirtreex}
+\typeout{DASH TREE-PASSED}
+\end{document}

@@ -492,6 +492,7 @@ The package emits `Package dirtreex Warning: Rerun LaTeX...` at `\end{document}`
 | `dirtreex.sty` | The package — a single self-contained file. |
 | `dirtreex_examples.tex` | Worked examples covering the full feature surface. Compile with `lualatex dirtreex_examples.tex` three times to settle tree locations and the table of contents. |
 | `assets/` | PNG glyphs (`directory.png`, `python.png`, `zip_file.png`) used by the icon examples in `dirtreex_examples.tex`. |
+| `tests/` | Three-engine regression suite; see [test instructions](tests/README.md) and [coverage](tests/COVERAGE.md). |
 | `README.md` | This documentation. |
 | `LICENSE` | The LaTeX Project Public License 1.3c. |
 

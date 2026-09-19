@@ -17,3 +17,8 @@
 **/*.xdv
 **/*.zref
 **/tmp/*
+
+# Regression outputs and Python cache; reviewed references stay tracked.
+/tests/work/
+/tests/__pycache__/
+!tests/expected/**/*.json.gz

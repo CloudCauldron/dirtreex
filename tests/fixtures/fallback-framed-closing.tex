@@ -1,0 +1,91 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=150pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+\makeatletter
+\newcount\ODformatted
+\newcount\ODoversize
+\newcount\ODskips
+\newdimen\ODcharge
+\newwrite\ODnodes
+\newwrite\ODpieces
+\immediate\openout\ODnodes=\jobname.nodes
+\immediate\openout\ODpieces=\jobname.pieces
+\let\ODformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+ \global\advance\ODformatted by1
+ \protected@write\ODnodes{}{ENTRY #1}%
+ \ODformat{#1}}
+\let\ODmeasure\dte@measurepiece
+\def\dte@measurepiece#1{%
+ \ODmeasure{#1}%
+ \ODcharge=\dimexpr\ht\dte@tbox+\dp\dte@tbox-\maxdepth\relax
+ \ifdim\ODcharge<\ht\dte@tbox\ODcharge=\ht\dte@tbox\fi
+ \ifdim\ODcharge>\textheight
+  \global\advance\ODoversize by1
+  \typeout{OD-OVERSIZE type=#1;ordinal=\the\dte@piecenum;charge=\the\ODcharge;body=\the\textheight}%
+ \fi}
+\let\ODdraw\dte@drawpiece
+\def\dte@drawpiece#1{%
+ \protected@write\ODpieces{}{PIECE \the\numexpr\dte@piecenum+1\relax:#1}%
+ \ODdraw{#1}}
+\let\ODskip\dte@skipcolumn
+\def\dte@skipcolumn{\global\advance\ODskips by1\ODskip}
+\AtEndDocument{%
+ \ifnum\ODformatted=3\relax\else\errmessage{Lost or rebuilt semantic rows}\fi
+ \ifnum\ODoversize>0\relax\else\errmessage{Oversized measured path not reached}\fi
+ \ifnum\ODskips>1\relax\errmessage{Unexpected repeated deferral}\fi
+ \typeout{OD-DONE rows=\the\ODformatted;oversized=\the\ODoversize;skips=\the\ODskips;pieces=\the\dte@piecenum}}
+
+\newcount\ODminimum
+\newcount\ODlastrejects
+\newcount\ODclosingminimum
+\newcount\ODterminal
+\let\ODtrackedmeasure\dte@measurepiece
+\def\dte@measurepiece#1{%
+ \ODtrackedmeasure{#1}%
+ \ifnum\dte@pagecount=0\relax
+  \ifx\dte@piecetype\dte@pfirst
+   \ifdim\dte@availht=\dte@minht\relax
+    \ifdim\ODcharge>\textheight
+     \global\advance\ODminimum by1
+     \typeout{OD-MINIMUM target=\the\dte@availht;minimum=\dte@minht;charge=\the\ODcharge}%
+    \fi
+   \fi
+  \fi
+ \fi}
+\let\ODdiscard\dte@discardpiece
+\def\dte@discardpiece{%
+ \ifnum\dte@pagecount>0\relax
+  \ifx\dte@piecetype\dte@plast\global\advance\ODlastrejects by1\relax\fi
+ \fi
+ \ODdiscard}
+\let\ODminht\dte@compute@minht
+\def\dte@compute@minht{%
+ \ODminht
+ \ifnum\dte@pagecount>0\relax
+  \ifdim\dte@minht<\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax\else
+   \global\advance\ODclosingminimum by1
+   \typeout{OD-CLOSING-MINIMUM min=\dte@minht;total=\the\dimexpr\ht\dte@framebox+\dp\dte@framebox\relax}%
+  \fi
+ \fi}
+\let\ODcont\dte@dosplit@cont
+\def\dte@dosplit@cont{%
+ \ODcont
+ \ifnum\dte@defercount=0\relax\else\errmessage{Output did not reset deferral}\fi
+ \ifnum\ODclosingminimum>0\relax
+  \ifx\dte@piecetype\dte@plast\else\errmessage{No terminal last output}\fi
+  \ifvoid\dte@framebox\errmessage{Terminal-copy source was cleared}\fi
+  \ifvoid\dte@tbox\else\errmessage{Measured output not consumed}\fi
+  \global\advance\ODterminal by1
+ \fi}
+\AtEndDocument{%
+ \ifnum\ODlastrejects>0\relax\else\errmessage{No closing rejection}\fi\ifnum\ODclosingminimum>0\relax\else\errmessage{No impossible smaller closing piece}\fi\ifnum\ODterminal>0\relax\else\errmessage{No terminal-copy acceptance}\fi
+ \typeout{OD-PATH minimum=\the\ODminimum;lastrejects=\the\ODlastrejects;closingminimum=\the\ODclosingminimum;terminal=\the\ODterminal}}
+
+\makeatother
+\begin{document}
+\begin{dirtreex}[box={margin={6pt,6pt,200pt,6pt}}]
+\dir{ROOT}{C001}{\file{A}{C002}\file{B}{C003}}
+\end{dirtreex}
+\end{document}

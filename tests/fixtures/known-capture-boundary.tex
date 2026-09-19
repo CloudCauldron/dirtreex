@@ -1,0 +1,32 @@
+\documentclass{article}
+\usepackage{dirtreex}
+\makeatletter
+\let\audit@preprocess\dte@preprocess
+\def\dte@preprocess{%
+  \typeout{AUDIT PREPROCESS tree=\the\dte@tnum; count=\the\dte@cnt; entry1=\dte@eget{1}{n}}%
+  \ifnum\dte@cnt>1 \typeout{AUDIT entry2=\dte@eget{2}{n}}\fi
+  \audit@preprocess}
+\newlength\AuditLength
+\def\AuditLiteralDimension{0pt}
+\setlength\AuditLength{\AuditLiteralDimension}
+\typeout{AUDIT SETLENGTH=\the\AuditLength}
+\begin{document}
+\begin{dirtreex}[pagebreak=false,box=false]
+  \file{OUTER-BEFORE}{}
+  \begin{dirtreex}[pagebreak=false,box=false]
+    \file{INNER}{}
+  \end{dirtreex}
+  \file{OUTER-AFTER}{}
+\end{dirtreex}
+\typeout{AUDIT POST-NEST tree=\the\dte@tnum; count=\the\dte@cnt; entry1=\dte@eget{1}{n}}
+\renewcommand\DirtreexFormatName[1]{%
+  \ifnum#1=1
+    \typeout{AUDIT FORMAT capture-flag=\ifdte@inenv TRUE\else FALSE\fi}%
+    \file{ADDED-DURING-RENDER}{}%
+  \fi
+  \DirtreexGetField{#1}{n}}
+\begin{dirtreex}[pagebreak=false,box=false]
+  \file{ORIGINAL}{}
+\end{dirtreex}
+\typeout{AUDIT POST-FORMAT count=\the\dte@cnt; entry2=\dte@eget{2}{n}}
+\end{document}

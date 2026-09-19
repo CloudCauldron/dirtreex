@@ -1,0 +1,52 @@
+\documentclass[11pt,oneside]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=160mm,paperheight=180mm,margin=16mm]{geometry}
+\usepackage{dirtreex}
+
+\usepackage{zref-savepos,etoolbox}
+\newcommand{\RGmark}[1]{\zsavepos{rg-\RGcase-#1}}
+\makeatletter
+\let\RGname\DirtreexFormatName
+\renewcommand{\DirtreexFormatName}[1]{\RGmark{n#1}\RGname{#1}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \typeout{RG-RAW|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \dte@normalize@rowbox}{}{\errmessage{Cannot probe root dimensions}}
+\patchcmd{\dte@render@root}{\dte@normalize@rowbox}{%
+  \dte@normalize@rowbox
+  \typeout{RG-NORM|\RGcase|\number\ht\dte@tbox|\number\dp\dte@tbox|\number\wd\dte@tbox}%
+  \typeout{RG-BLS|\RGcase|\number\dte@bls}%
+}{}{\errmessage{Cannot probe normalized dimensions}}
+\let\RGoutput\dte@output@framed
+\def\dte@output@framed{%
+  \typeout{RG-FRAME|\RGcase|\number\ht\dte@framebox|\number\dp\dte@framebox|\number\wd\dte@framebox}%
+  \RGoutput}
+\let\RGconnector\dte@draw@connector
+\def\dte@draw@connector#1{%
+  \typeout{RG-CONN|\RGcase|#1|\number\dte@scratch}%
+  \RGconnector{#1}}
+\makeatother
+\pagestyle{empty}
+
+
+\begin{document}
+\begingroup\def\RGcase{1}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\small,box={border color=red},line color=blue]
+\verbfile[icon={\textcolor{green!50!black}{+}}]|ROOT_$%#&~^{}|{\RGmark{c1}Comment01\RGmark{e1}}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\clearpage
+\begingroup\def\RGcase{2}
+\noindent\RGmark{before}Before paragraph.\par\vspace{30pt}
+
+
+\begin{dirtreex}[box=true,pagebreak=false,fontsize=\small,box={border color=red},line color=blue]
+\verbfile[icon={\textcolor{green!50!black}{+}}]|ROOT_$%#&~^{}|{\RGmark{c1}Comment01\RGmark{e1}\\\RGmark{c2}Comment02\RGmark{e2}\\\RGmark{c3}Comment03\RGmark{e3}\\\RGmark{c4}Comment04\RGmark{e4}}
+\end{dirtreex}
+
+\par\noindent\RGmark{after}After paragraph.\par\endgroup
+\end{document}

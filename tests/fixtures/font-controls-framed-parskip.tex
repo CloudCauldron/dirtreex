@@ -1,0 +1,82 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=430pt,paperheight=560pt,textwidth=310pt,textheight=250pt,top=40pt]{geometry}
+\usepackage{parskip}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\newcount\FHcalls
+\newcount\FHentries
+\newwrite\FHwrites
+\immediate\openout\FHwrites=\jobname.nodes
+\makeatletter
+\def\FHstate{\the\parfillskip|\the\parskip|\the\parindent|\the\baselineskip|\the\lineskip|\the\lineskiplimit|\the\topskip|\f@encoding|\f@family|\f@series|\f@shape|\f@size|\f@baselineskip|\baselinestretch|\fontname\font}
+\def\FHsave{\edef\FHsaved{\FHstate}}
+\def\FHcheck{\edef\FHnow{\FHstate}\ifx\FHnow\FHsaved\else\errmessage{Outer font or paragraph state leaked}\fi\typeout{FH-RESTORED \FHnow}}
+\let\FHrender\dte@render@tree
+\def\dte@render@tree{\typeout{FH-FRAME \the\parfillskip|\f@family|\f@series|\f@shape|\f@size|\the\baselineskip}\FHrender}
+\let\FHformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{\global\advance\FHentries by1\write\FHwrites{ENTRY #1}\typeout{FH-ROW #1|\the\parfillskip|\f@series|\f@shape|\f@size|\the\baselineskip}\FHformat{#1}}
+\makeatother
+\AddToHook{shipout/before}{\ifnum\value{page}>24 \errmessage{No pagination progress}\fi}
+\AtEndDocument{\typeout{FH-CALLS \the\FHcalls}\typeout{FH-ENTRIES \the\FHentries}}
+
+\begin{document}
+
+
+\large\sffamily\itshape
+\parfillskip=23pt plus 3fil minus 2pt\relax
+\parskip=5pt plus 2pt minus 1pt\relax
+\parindent=17pt\relax
+\lineskip=2pt plus 1pt minus .5pt\relax
+\lineskiplimit=1pt\relax
+\FHsave
+Surrounding text before the tree, with its own font and paragraph settings.
+
+\begin{dirtreex}[box=true,fontsize={\global\advance\FHcalls by1\relax \small\parfillskip=13pt plus 2fil minus 1pt\relax}]
+\dir{E000}{C000}{
+\file{E001}{C001}
+\file{E002}{C002}
+\file{E003}{C003}
+\file{E004}{C004}
+\file{E005}{C005}
+\file{E006}{C006}
+\file{E007}{C007}
+\file{E008}{C008}
+\file{E009}{C009}
+\file{E010}{C010}
+\file{E011}{C011}
+\file{E012}{C012}
+\file{E013}{C013}
+\file{E014}{C014}
+\file{E015}{C015}
+\file{E016}{C016}
+\file{E017}{C017}
+\file{E018}{C018}
+\file{E019}{C019}
+\file{E020}{C020}
+\file{E021}{C021}
+\file{E022}{C022}
+\file{E023}{C023}
+\file{E024}{C024}
+\file{E025}{C025}
+\file{E026}{C026}
+\file{E027}{C027}
+\file{E028}{C028}
+\file{E029}{C029}
+\file{E030}{C030}
+\file{E031}{C031}
+\file{E032}{C032}
+\file{E033}{C033}
+\file{E034}{C034}
+\file{E035}{C035}
+\file{E036}{C036}
+\file{E037}{C037}
+\file{E038}{C038}
+\file{E039}{C039}
+}
+\end{dirtreex}
+\FHcheck Surrounding text after the tree.\par
+
+\end{document}

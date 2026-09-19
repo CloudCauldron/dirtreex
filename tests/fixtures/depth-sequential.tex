@@ -1,0 +1,83 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=94pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+
+\makeatletter
+\newcount\SDbefore \newcount\SDbegin \newcount\SDhbox \newcount\SDvbox
+\newcount\SDformatted \newcount\SDpicture \newcount\SDmutations
+\newwrite\SDnodes \immediate\openout\SDnodes=\jobname.nodes
+\newwrite\SDtails \immediate\openout\SDtails=\jobname.tails
+\newwrite\SDevents \immediate\openout\SDevents=\jobname.events
+\newwrite\SDbounds \immediate\openout\SDbounds=\jobname.bounds
+\newmarks\SDmarks
+\everyhbox\expandafter{\the\everyhbox\global\advance\SDhbox by1}
+\everyvbox\expandafter{\the\everyvbox\global\advance\SDvbox by1}
+\let\SDformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\SDformatted by1
+  \protected@write\SDnodes{}{ENTRY \the\dte@tnum:#1}%
+  \SDformat{#1}}
+\let\SDrender\dte@render@tree
+\def\dte@render@tree{%
+  \marks\SDmarks{FIRST}\SDrender
+  \marks\SDmarks{LAST}\protected@write\SDtails{}{TAIL \the\dte@tnum}}
+\def\SDcounts{\the\SDbefore/\the\SDbegin/\the\SDhbox/\the\SDvbox}
+\ifdefined\dte@set@firstmin
+  \let\SDsetfirst\dte@set@firstmin
+  \def\dte@set@firstmin#1#2{%
+    \edef\SDsaved{\SDcounts}%
+    \SDsetfirst{#1}{#2}%
+    \edef\SDnow{\SDcounts}%
+    \ifx\SDsaved\SDnow\else\errmessage{Depth refresh re-executed hooks}\fi
+    \typeout{SD-BUDGET natural=#1;depth=#2;cap=\the\splitmaxdepth;minimum=\dte@firstminht}}
+\fi
+\let\SDsplit\dte@splitfirst
+\def\dte@splitfirst#1{\SDsplit#1%
+  \typeout{SD-SPLIT min=\dte@minht;target=\the\dte@availht;depth=\the\splitmaxdepth;badness=\the\badness}}
+\def\SDstate{\the\splitmaxdepth/\the\baselineskip/\the\parskip/\the\parfillskip/\f@size/\f@family}
+\newif\ifSDarmed \newif\ifSDouterpara
+\def\SDmutation{}
+\AddToHook{para/before}{\SDouterparafalse\ifinner\else\ifSDarmed
+  \SDouterparatrue\global\advance\SDbefore by1
+  \SDmutation
+\fi\fi}
+\AddToHook{para/begin}{\ifSDouterpara
+  \global\advance\SDbegin by1
+  \relax
+\fi}
+\tikzset{every picture/.append style={execute at end picture={%
+  \global\advance\SDpicture by1
+  \protected@write\SDevents{}{PICTURE}%
+  \protected@write\SDbounds{}{BOUNDS \the\dimexpr\pgf@picmaxy-\pgf@picminy\relax}}}}
+\AtEndDocument{\typeout{SD-COUNTS before=\the\SDbefore;begin=\the\SDbegin;hbox=\the\SDhbox;vbox=\the\SDvbox;format=\the\SDformatted;picture=\the\SDpicture;mutations=\the\SDmutations}}
+\makeatother
+\def\SDmutation{\global\advance\SDmutations by1\relax\splitmaxdepth=0pt\relax}
+
+
+\begin{document}
+\noindent PREFIX\par
+\begingroup
+\splitmaxdepth=\maxdimen\relax
+\SDarmedtrue
+\makeatletter\edef\SDouter{\SDstate}\makeatother
+\begin{dirtreex}[box={margin={6pt,6pt,6pt,6pt}}]
+\dir{R000}{C000L1\\C000L2\\C000L3\\C000L4\\C000L5\\C000L6}{
+\file{R001}{C001}
+\file{R002}{C002}
+\file{R003}{C003}
+\file{R004}{C004}
+}
+\end{dirtreex}
+\SDarmedfalse
+\makeatletter\edef\SDafter{\SDstate}\ifx\SDouter\SDafter\else\errmessage{Outer state changed}\fi\makeatother
+\endgroup\clearpage
+\SDarmedtrue
+\makeatletter\edef\SDouter{\SDstate}\makeatother
+\begin{dirtreex}[box=false]
+\dir{R100}{C100}{\file{R101}{C101}}
+\end{dirtreex}
+\SDarmedfalse
+\makeatletter\edef\SDafter{\SDstate}\ifx\SDouter\SDafter\else\errmessage{Following state changed}\fi\makeatother
+
+\end{document}

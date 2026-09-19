@@ -1,0 +1,211 @@
+% Phase 5B control: value selection, scope, actual caps, public geometry.
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage[margin=20mm]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\ProbeGroup \newcount\ProbePath \newcount\ProbeChoice
+\newcount\ProbeUnits \newcount\ProbeShapes \newcount\ProbePublicCalls
+\newdimen\ProbeExpected \newdimen\ProbeOuterEm \newbox\ProbeBox
+\def\ProbeFail#1{\errmessage{PHASE5B ASSERTION FAILED: #1}}
+\def\ProbeDim#1#2#3{\ifdim#1=#2\relax\else\ProbeFail{#3; actual=\the\dimexpr#1\relax; expected=\the\dimexpr#2\relax}\fi}
+\def\ProbeInt#1#2#3{\ifnum#1=#2\relax\else\ProbeFail{#3}\fi}
+\def\ProbeSame#1#2#3{\ifx#1#2\else\ProbeFail{#3}\fi}
+\def\ProbeSet#1#2{\expandafter\def\csname dte@e#1\endcsname{#2}}
+\def\ProbeCurSentinel{connector sentinel}
+\def\ProbePtSentinel{passthrough sentinel}
+\def\ProbePair#1#2#3{%
+  \let\dte@cur@er\ProbeCurSentinel \let\dte@pt@er\ProbePtSentinel
+  \dte@connE=-71pt \dte@ptE=-73pt
+  \begingroup
+    \ProbeGroup=\currentgrouplevel
+    \def\dte@eProbea{}\def\dte@eProbed{1}%
+    \dte@width=40pt \baselineskip=40pt \dte@elbowR=2pt
+    \dte@scratch=7pt \dte@tempdim=17pt
+    \dte@splitflagfalse
+    \def\dte@connector@sharp{\def\ProbeDispatch{0}}%
+    \def\dte@connector@rounded{\def\ProbeDispatch{1}}%
+    \ProbePath=1 \dte@draw@connector{Probe}%
+    \ProbeDim\dte@connE{#2}{#1 connector selected value}%
+    \ProbeInt\ProbeDispatch{#3}{#1 dispatch before clamp}%
+    \ProbeSame\dte@cur@er\dte@eProbeer{#1 connector scratch meaning}%
+    \ProbeSame\dte@pt@er\ProbePtSentinel{#1 connector touched other scratch}%
+    \ProbeDim\dte@ptE{-73pt}{#1 connector touched other dimension}%
+    \ifdefined\dte@eProbeer\else\ProbeFail{#1 lookup did not define missing slot}\fi
+    \let\dte@cur@er\ProbeCurSentinel \dte@connE=-71pt
+    \ProbePath=2 \dte@draw@passthrough{Probe}%
+    \ProbeDim\dte@ptE{#2}{#1 passthrough selected value}%
+    \ProbeSame\dte@pt@er\dte@eProbeer{#1 passthrough scratch meaning}%
+    \ProbeSame\dte@cur@er\ProbeCurSentinel{#1 passthrough touched other scratch}%
+    \ProbeDim\dte@connE{-71pt}{#1 passthrough touched other dimension}%
+    \ProbeDim\dte@tempdim{17pt}{#1 passthrough tempdim restore}%
+    \typeout{PROBE ELBOW UNIT #1 PASS; selected=\the\dte@ptE; dispatch=#3}%
+  \endgroup
+  \ProbeSame\dte@cur@er\ProbeCurSentinel{#1 connector scratch leaked}%
+  \ProbeSame\dte@pt@er\ProbePtSentinel{#1 passthrough scratch leaked}%
+  \ProbeDim\dte@connE{-71pt}{#1 connector dimension leaked}%
+  \ProbeDim\dte@ptE{-73pt}{#1 passthrough dimension leaked}%
+  \global\advance\ProbeUnits by1\relax
+}
+% Expansion during dimension scanning sees caller state and group level.
+\protected\def\ProbeProtected{%
+  \ifnum\currentgrouplevel=\ProbeGroup
+    \ifnum\ProbePath=1
+      \ifx\dte@cur@er\dte@eProbeer
+        \ifdim\dte@connV=7pt 3pt\else 101pt\fi
+      \else 102pt\fi
+    \else
+      \ifx\dte@pt@er\dte@eProbeer
+        \ifdim\dte@save@tempdim=17pt 3pt\else 103pt\fi
+      \else 104pt\fi
+    \fi
+  \else 105pt\fi
+}
+\def\ProbeCommon#1#2#3#4#5{%
+  \begingroup
+    \baselineskip=12pt \dte@width=#3\relax #4%
+    \dte@ptE=#2\relax \dte@clampelbow\dte@ptE
+    \ProbeDim\dte@ptE{#5}{#1 direct common clamp}%
+    \typeout{PROBE ELBOW COMMON #1 PASS; value=\the\dte@ptE}%
+  \endgroup
+}
+% No renderer or clamp is replaced in these geometry cases.
+\def\ProbeShape#1#2#3#4#5#6#7{%
+  \begingroup
+    \baselineskip=12pt \dte@width=#3\relax #5%
+    \dte@cnt=2 \ProbeSet{1d}{1}\ProbeSet{2d}{1}%
+    \ProbeSet{1a}{1}\ProbeSet{1er}{#2}%
+    \let\dte@rowtail\relax \dte@compute@stride
+    \setbox\ProbeBox=\hbox{%
+      \dte@tempdim=47pt \dte@connV=#4\relax
+      \dte@draw@passthrough{1}%
+      \ProbeDim\dte@ptE{#7}{#1 actual passthrough cap}%
+      \ProbeDim\dte@tempdim{47pt}{#1 actual passthrough restore}%
+      \dte@scratch=#4\relax \dte@resolve@style{1}%
+      \dte@draw@connector{1}%
+      \ProbeDim\dte@connE{#6}{#1 actual connector cap}%
+      \typeout{PROBE ELBOW SHAPE #1 PASS; C=\the\dte@connE; P=\the\dte@ptE}%
+    }%
+    \noindent\hbox to110pt{\ttfamily #1\hfil}\copy\ProbeBox\par
+  \endgroup
+  \global\advance\ProbeShapes by1\relax
+}
+\let\ProbeOriginalPreprocess\dte@preprocess
+\def\dte@preprocess{%
+  \expandafter\global\expandafter\let\csname dte@e4er\endcsname\@undefined
+  \expandafter\global\expandafter\let\csname dte@e6er\endcsname\relax
+  \ProbeOriginalPreprocess
+}
+\protected\def\ProbePublicRadius{2.75pt}
+\protected\def\ProbePublicConditional{\ifnum\ProbeChoice=1 3.25pt\else 8pt\fi}
+\def\ProbePublicRaw#1{%
+  \ProbeExpected=\ProbeOuterEm\relax
+  \ifnum#1=10 \ProbeExpected=0pt\relax\fi
+  \ifnum#1=12 \ProbeExpected=3pt\relax\fi
+  \ifnum#1=14 \ProbeExpected=20pt\relax\fi
+  \ifnum#1=16 \ProbeExpected=.25em\relax\fi
+  \ifnum#1=18 \ProbeExpected=2.75pt\relax\fi
+  \ifnum#1=20 \ProbeExpected=3.25pt\relax\fi
+}
+\def\ProbeExpectedCaps{%
+  \ifdim\ProbeExpected>\dte@width \ProbeExpected=\dte@width\relax\fi
+  \ifdim\ProbeExpected>.5\baselineskip \ProbeExpected=.5\baselineskip\relax\fi
+  \ifdte@splitflag
+    \ifdim\ProbeExpected>.2\baselineskip \ProbeExpected=.2\baselineskip\relax\fi
+  \fi
+}
+\def\ProbeInstallPublicChecks{%
+  \let\ProbeOriginalConnector\dte@draw@connector
+  \def\dte@draw@connector##1{%
+    \ProbeOriginalConnector{##1}%
+    \ProbePublicRaw{##1}%
+    \ifdim\ProbeExpected>0pt
+      \ifdim\ProbeExpected>\dte@connV \ProbeExpected=\dte@connV\relax\fi
+      \ProbeExpectedCaps
+    \fi
+    \ProbeDim\dte@connE\ProbeExpected{public ##1 connector geometry}%
+    \expandafter\let\expandafter\ProbeSlot\csname dte@e##1er\endcsname
+    \ProbeSame\dte@cur@er\ProbeSlot{public ##1 connector scratch}%
+    \global\advance\ProbePublicCalls by1
+    \typeout{PROBE ELBOW PUBLIC C \the\dte@tnum/##1=\the\dte@connE}%
+  }%
+  \let\ProbeOriginalPassthrough\dte@draw@passthrough
+  \def\dte@draw@passthrough##1{%
+    \ProbeOriginalPassthrough{##1}%
+    \ProbePublicRaw{##1}\ProbeExpectedCaps
+    \ProbeDim\dte@ptE\ProbeExpected{public ##1 passthrough geometry}%
+    \expandafter\let\expandafter\ProbeSlot\csname dte@e##1er\endcsname
+    \ProbeSame\dte@pt@er\ProbeSlot{public ##1 passthrough scratch}%
+    \global\advance\ProbePublicCalls by1
+    \typeout{PROBE ELBOW PUBLIC P \the\dte@tnum/##1=\the\dte@ptE}%
+  }%
+}
+\def\ProbeTree#1{%
+  \begin{dirtreex}[box=#1,pagebreak=false,fontsize=\footnotesize,
+    elbow radius=1em,line width=.6pt]
+    \ProbeChoice=0
+    \dir{P5BROOT}{}{%
+      \dir[line color=red]{P5BINHERITED}{}{\file{child-a}{}}
+      \dir[line color=blue]{P5BMISSING}{}{\file{child-b}{}}
+      \dir[line color=teal]{P5BRELAX}{}{\file{child-c}{}}
+      \dir[elbow radius={},line color=green!60!black]{P5BEMPTY}{}{\file{child-d}{}}
+      \dir[elbow radius=0pt,line color=orange]{P5BZERO}{}{\file{child-e}{}}
+      \dir[elbow radius=3pt,line color=purple]{P5BPOSITIVE}{}{\file{child-f}{}}
+      \dir[elbow radius=20pt,line color=teal]{P5BLARGE}{}{\file{child-g}{}}
+      \dir[elbow radius=.25em,line color=blue]{P5BRELATIVE}{}{\file{child-h}{}}
+      \protected\def\ProbePublicRadius{9pt}%
+      \dir[elbow radius=\ProbePublicRadius,line color=red]{P5BPROTECTED}{}{\file{child-i}{}}
+      \dir[elbow radius=\ProbePublicConditional,line color=purple]{P5BCONDITIONAL}{}{\file{child-j}{}}
+      \file{P5BTAIL}{}
+    }
+  \end{dirtreex}%
+}
+\makeatother
+\begin{document}
+\makeatletter
+\begingroup
+  \normalfont\normalsize
+  \let\dte@eProbeer\@undefined
+  \ProbePair{missing}{2pt}{1}%
+  \ifdefined\dte@eProbeer\ProbeFail{missing slot creation leaked group}\fi
+  \let\dte@eProbeer\relax \ProbePair{direct-relax}{2pt}{1}%
+  \def\dte@eProbeer{}\ProbePair{empty}{2pt}{1}%
+  \def\dte@eProbeer{0pt}\ProbePair{zero}{0pt}{0}%
+  \def\dte@eProbeer{-1pt}\ProbePair{negative}{-1pt}{0}%
+  \def\dte@eProbeer{4pt}\ProbePair{positive}{4pt}{1}%
+  \def\dte@eProbeer{.4em}\ProbePair{relative-ten}{.4em}{1}%
+  \Large
+  \ProbePair{relative-fourteen}{.4em}{1}%
+  \normalsize
+  \def\dte@eProbeer{\ifnum\ProbeChoice=1 3pt\else 4pt\fi}%
+  \ProbeChoice=0 \ProbePair{conditional-four}{4pt}{1}%
+  \ProbeChoice=1 \ProbePair{conditional-three}{3pt}{1}%
+  \def\dte@eProbeer{\ProbeProtected}\ProbePair{protected-context}{3pt}{1}%
+  \protected\def\dte@eProbeer{3pt}\ProbePair{protected-slot}{3pt}{1}%
+\endgroup
+\ProbeInt\ProbeUnits{12}{all unit cases}
+\ProbeCommon{width}{20pt}{2pt}{\dte@splitflagfalse}{2pt}
+\ProbeCommon{half-baseline}{20pt}{30pt}{\dte@splitflagfalse}{6pt}
+\ProbeCommon{split}{20pt}{30pt}{\dte@splitflagtrue}{.2\baselineskip}
+\ProbeCommon{negative}{-1pt}{30pt}{\dte@splitflagtrue}{-1pt}
+\noindent P5BSHAPES\par
+\ProbeShape{short-stem}{4pt}{20pt}{1pt}{\dte@splitflagfalse}{1pt}{4pt}
+\ProbeShape{width-cap}{20pt}{2pt}{10pt}{\dte@splitflagfalse}{2pt}{2pt}
+\ProbeShape{half-baseline}{20pt}{30pt}{10pt}{\dte@splitflagfalse}{6pt}{6pt}
+\ProbeShape{split-cap}{20pt}{30pt}{10pt}{\dte@splitflagtrue}{.2\baselineskip}{.2\baselineskip}
+\ProbeShape{sharp-zero}{0pt}{20pt}{6pt}{\dte@splitflagfalse}{0pt}{0pt}
+\ProbeShape{negative}{-1pt}{20pt}{6pt}{\dte@splitflagfalse}{-1pt}{-1pt}
+\ProbeInt\ProbeShapes{6}{all actual shape cases}
+\clearpage
+\ProbeOuterEm=1em \ProbeChoice=1
+\ProbeInstallPublicChecks
+\noindent P5BBARE\par
+\ProbeTree{false}
+\clearpage
+\noindent P5BFRAMED\par
+\ProbeTree{true}
+\ProbeInt\ProbePublicCalls{84}{all public connector and passthrough calls}
+\typeout{PROBE ELBOW CONTRACTS PASS; units=12; common=4; shapes=6; public=84}
+\makeatother
+\end{document}

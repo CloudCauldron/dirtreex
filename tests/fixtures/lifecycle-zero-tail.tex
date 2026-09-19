@@ -1,0 +1,83 @@
+\documentclass[10pt]{article}
+\usepackage[paperwidth=420pt,paperheight=560pt,textwidth=310pt,textheight=210pt,top=42pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}\raggedbottom
+\AddToHook{para/before}{\vskip0pt minus 4pt\relax}
+
+\makeatletter
+\newwrite\FTentries\immediate\openout\FTentries=\jobname.entries
+\newwrite\FTpieces\immediate\openout\FTpieces=\jobname.pieces
+\newwrite\FTtails\immediate\openout\FTtails=\jobname.tails
+\newcount\FTformatted
+\let\FTformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\FTformatted by1
+  \protected@write\FTentries{}{ENTRY \the\dte@tnum:#1}%
+  \edef\@currentlabel{ENTRY #1}\label{FT:\the\dte@tnum:#1}%
+  \FTformat{#1}}
+\let\FTpiece\dte@drawpiece
+\def\dte@drawpiece#1{%
+  \protected@write\FTpieces{}{PIECE #1;ht=\the\ht\dte@splitresult;dp=\the\dp\dte@splitresult}%
+  \FTpiece{#1}}
+\newcount\FTskips\let\FTskip\dte@skipcolumn
+\def\dte@skipcolumn{\global\advance\FTskips by1
+  \ifnum\FTskips>100\errmessage{FT no progress}\fi\FTskip}
+\AtEndDocument{\typeout{FT-FORMATTED \the\FTformatted}}
+\makeatother
+\makeatletter\let\FTrender\dte@render@tree\def\dte@render@tree{\FTrender\penalty-10000 \write\FTtails{TAIL-EFFECT}}\makeatother
+
+\makeatletter
+\newcount\ZThits
+\newif\ifZTzero
+\def\ZTerror#1{\PackageError{lifecycle-zero-tail}{#1}{A nonvoid zero-extent tail must be retained in selected output.}}
+\def\ZTstate{\ifhmode H\else V\fi:\ifinner I\else O\fi:\number\currentgrouplevel:\the\dte@piecenum:\the\dte@defercount:\the\dte@pagecount:\number\wd\dte@framebox:\number\ht\dte@framebox:\number\dp\dte@framebox}
+\let\ZTclassify\dte@classify@split
+\def\dte@classify@split#1{%
+  \ZTzerofalse
+  \ifvoid#1\else
+    \ifdim\dimexpr\ht#1+\dp#1\relax=0pt\relax\ZTzerotrue\fi
+  \fi
+  \edef\ZTbefore{\ZTstate}%
+  \edef\ZThooks{\the\everyvbox}%
+  \ZTclassify#1%
+  \edef\ZTafter{\ZTstate}%
+  \ifx\ZTbefore\ZTafter\else\ZTerror{Classification changed output state or original rows}\fi
+  \edef\ZTafter{\the\everyvbox}%
+  \ifx\ZThooks\ZTafter\else\ZTerror{Box hook tokens not restored}\fi
+  \ifZTzero
+    \ifvoid#1\else\ZTerror{Zero tail was not consumed}\fi
+    \ifvoid\dte@splitresult\ZTerror{Selected rows lost during tail attachment}\fi
+    \ifx\dte@piecetype\dte@plast\else\ZTerror{Zero tail did not classify as last}\fi
+    \global\advance\ZThits by1
+    \typeout{ZT-ATTACHED ordinal=\the\dte@piecenum;source-height=\the\ht\dte@framebox}%
+  \fi}
+\AtEndDocument{%
+  \ifnum\ZThits>0\else\ZTerror{No nonvoid zero-extent remainder was tested}\fi
+  \ifnum\FTformatted=17\else\ZTerror{Rows were lost or formatted repeatedly}\fi
+  \typeout{ZT-ALL-CHECKS-PASSED attachments=\the\ZThits;rows=\the\FTformatted}}
+\makeatother
+
+\begin{document}
+
+\begin{dirtreex}[box={margin={6pt,6pt,65pt,6pt}}]
+\dir{R000}{C000}{
+\file{R001}{C001}
+\file{R002}{C002}
+\file{R003}{C003}
+\file{R004}{C004}
+\file{R005}{C005}
+\file{R006}{C006}
+\file{R007}{C007}
+\file{R008}{C008}
+\file{R009}{C009}
+\file{R010}{C010}
+\file{R011}{C011}
+\file{R012}{C012}
+\file{R013}{C013}
+\file{R014}{C014}
+\file{R015}{C015}
+\file{R016}{C016}
+}
+\end{dirtreex}
+
+\end{document}

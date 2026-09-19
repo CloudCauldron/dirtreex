@@ -1,0 +1,137 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=400pt,textwidth=280pt,textheight=220pt,centering]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\renewcommand\topfraction{1}
+\renewcommand\bottomfraction{1}
+\renewcommand\textfraction{0}
+\renewcommand\floatpagefraction{1}
+\setcounter{topnumber}{1}
+\setcounter{bottomnumber}{1}
+\setcounter{totalnumber}{1}
+\setlength\textfloatsep{20pt}
+
+\newcount\CFformatted
+\newcount\CFmiddlecalls
+\newwrite\CFwritten
+\immediate\openout\CFwritten=\jobname.nodes
+\let\CFformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\CFformatted by1
+  \write\CFwritten{ENTRY #1}%
+  \CFformat{#1}}
+\AddToHook{shipout/before}{\ifnum\value{page}>30 \errmessage{Too many pages}\fi}
+\AtEndDocument{\typeout{CF-FORMATTED \the\CFformatted}}
+
+\usepackage{graphicx}
+
+\makeatletter
+\newcount\LIcalls
+\newcount\LIcontcalls
+\newcount\LIaccepts
+\newcount\LImeasurements
+\def\LIerror#1{\PackageError{lifecycle-inner-direct}{#1}{Inner direct output must keep direct ownership and formatting.}}
+\let\LIfirst\dte@dosplit@first
+\def\dte@dosplit@first{%
+  \ifinner\else\LIerror{Direct first output was not inner}\fi
+  \global\advance\LIcalls by1
+  \LIfirst
+  \ifnum\dte@defercount=0\else\LIerror{Inner output did not reset deferral}\fi
+  \ifvoid\dte@framebox\else\LIerror{Direct inner output left unconsumed rows}\fi}
+\let\LIcont\dte@dosplit@cont
+\def\dte@dosplit@cont{%
+  \ifinner\else\LIerror{Direct continuation was not inner}\fi
+  \global\advance\LIcontcalls by1
+  \LIcont}
+\let\LIaccept\dte@acceptsplit
+\def\dte@acceptsplit{%
+  \ifinner\else\LIerror{Inner remainder transfer lost its mode}\fi
+  \global\advance\LIaccepts by1
+  \LIaccept}
+\let\LImeasure\dte@measurepiece
+\def\dte@measurepiece#1{%
+  \global\advance\LImeasurements by1\LImeasure{#1}}
+\let\LIsingle\dte@measure@single
+\def\dte@measure@single{%
+  \global\advance\LImeasurements by1\LIsingle}
+\AtEndDocument{%
+  \ifnum\LIcalls=1\else\LIerror{Missing direct first path}\fi
+  \ifnum\LIcontcalls>0\else\LIerror{Missing direct continuation}\fi
+  \ifnum\LIaccepts=1\else\LIerror{Missing direct copied-remainder acceptance}\fi
+  \ifnum\LImeasurements=0\else\LIerror{Direct path acquired measured-picture trials}\fi
+  \ifnum\CFformatted=61\else\LIerror{Inner semantic rows lost or rebuilt}\fi
+  \typeout{LI-ALL-CHECKS-PASSED first=\the\LIcalls;continuations=\the\LIcontcalls;accepts=\the\LIaccepts;measurements=\the\LImeasurements;rows=\the\CFformatted}}
+\makeatother
+
+\begin{document}
+Ordinary preceding paragraph.\par\vspace{25pt}
+\resizebox{!}{100pt}{\begin{minipage}{\linewidth}
+\begin{dirtreex}[box=true,pagebreak=true,box={border color=red},line color=blue]
+\dir{E000}{C000}{
+\file{E001}{C001}
+\file{E002}{C002}
+\file{E003}{C003}
+\file{E004}{C004}
+\file{E005}{C005}
+\file{E006}{C006}
+\file{E007}{C007}
+\file{E008}{C008}
+\file{E009}{C009}
+\file{E010}{C010}
+\file{E011}{C011}
+\file{E012}{C012}
+\file{E013}{C013}
+\file{E014}{C014}
+\file{E015}{C015}
+\file{E016}{C016}
+\file{E017}{C017}
+\file{E018}{C018}
+\file{E019}{C019}
+\file{E020}{C020}
+\file{E021}{C021}
+\file{E022}{C022}
+\file{E023}{C023}
+\file{E024}{C024}
+\file{E025}{C025}
+\file{E026}{C026}
+\file{E027}{C027}
+\file{E028}{C028}
+\file{E029}{C029}
+\file{E030}{C030}
+\file{E031}{C031}
+\file{E032}{C032}
+\file{E033}{C033}
+\file{E034}{C034}
+\file{E035}{C035}
+\file{E036}{C036}
+\file{E037}{C037}
+\file{E038}{C038}
+\file{E039}{C039}
+\file{E040}{C040}
+\file{E041}{C041}
+\file{E042}{C042}
+\file{E043}{C043}
+\file{E044}{C044}
+\file{E045}{C045}
+\file{E046}{C046}
+\file{E047}{C047}
+\file{E048}{C048}
+\file{E049}{C049}
+\file{E050}{C050}
+\file{E051}{C051}
+\file{E052}{C052}
+\file{E053}{C053}
+\file{E054}{C054}
+\file{E055}{C055}
+\file{E056}{C056}
+\file{E057}{C057}
+\file{E058}{C058}
+\file{E059}{C059}
+\file{E060}{C060}
+}
+\end{dirtreex}
+\end{minipage}}
+AFTER.
+\end{document}

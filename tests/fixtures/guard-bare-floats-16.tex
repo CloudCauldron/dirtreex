@@ -1,0 +1,117 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=400pt,textwidth=280pt,textheight=180pt,centering]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\newwrite\Aentries
+\immediate\openout\Aentries=\jobname.nodes
+\newcount\Aformatted
+\let\Aformat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{\global\advance\Aformatted by1\write\Aentries{ENTRY #1}\Aformat{#1}}
+\makeatletter
+\let\Askip\dte@skipcolumn
+\newcount\Askips
+\def\dte@skipcolumn{%
+  \global\advance\Askips by1
+  \typeout{AUDIT-SKIP \the\Askips;page=\thepage;goal=\the\pagegoal;total=\the\pagetotal;avail=\the\dte@availht;min=\dte@minht}%
+
+  \Askip}
+\let\Amin\dte@compute@minht
+\def\dte@compute@minht{\Amin\typeout{AUDIT-MIN total=\dte@minht;depth=\the\dte@tempdim}}
+\let\Apiece\dte@drawpiece
+\def\dte@drawpiece#1{\typeout{AUDIT-PIECE #1;page=\thepage;ht=\the\ht\dte@splitresult;dp=\the\dp\dte@splitresult}\Apiece{#1}}
+\AtEndDocument{\typeout{AUDIT-FORMATTED \the\Aformatted}\typeout{AUDIT-PIECES \the\dte@piecenum}}
+\makeatother
+\AddToHook{shipout/before}{}
+
+\renewcommand\topfraction{1}
+\renewcommand\textfraction{0}
+\renewcommand\floatpagefraction{1}
+\setcounter{topnumber}{1}
+\setcounter{totalnumber}{1}
+\setlength\textfloatsep{20pt}
+
+
+\makeatletter
+\ifcsname dte@check@defer\endcsname
+  \let\DGcheck\dte@check@defer
+  \def\dte@check@defer{%
+    \typeout{DG-DEFER attempt=\the\numexpr\dte@defercount+1\relax;piece=\the\dte@pagecount;tree=\the\dte@tnum}%
+    \DGcheck}
+\fi
+\makeatother
+
+
+\makeatletter
+\newif\ifDGprogresschecked
+\let\DGnewpage\newpage
+\def\newpage{%
+  \ifdte@inenv
+    \ifnum\dte@pagecount=0\relax
+      \ifnum\dte@piecenum>0\relax
+        \ifnum\dte@defercount=0\relax\else
+          \errmessage{First committed fragment did not reset deferral}%
+        \fi
+        \global\DGprogresscheckedtrue
+      \fi
+    \fi
+  \fi
+  \DGnewpage}
+\let\DGoutput\dte@output@framed
+\def\dte@output@framed{%
+  \DGoutput
+  \ifnum\dte@defercount=0\relax\else
+    \errmessage{Completed tree did not reset deferral}%
+  \fi}
+\AtEndDocument{%
+  \ifDGprogresschecked\else
+    \errmessage{No first-fragment progress boundary was checked}%
+  \fi}
+\makeatother
+
+\begin{document}
+\begin{figure}[t]\vbox to125pt{\hbox{F01TOP}\vfil\hbox{F01END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F02TOP}\vfil\hbox{F02END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F03TOP}\vfil\hbox{F03END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F04TOP}\vfil\hbox{F04END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F05TOP}\vfil\hbox{F05END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F06TOP}\vfil\hbox{F06END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F07TOP}\vfil\hbox{F07END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F08TOP}\vfil\hbox{F08END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F09TOP}\vfil\hbox{F09END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F10TOP}\vfil\hbox{F10END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F11TOP}\vfil\hbox{F11END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F12TOP}\vfil\hbox{F12END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F13TOP}\vfil\hbox{F13END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F14TOP}\vfil\hbox{F14END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F15TOP}\vfil\hbox{F15END}}\end{figure}
+\begin{figure}[t]\vbox to125pt{\hbox{F16TOP}\vfil\hbox{F16END}}\end{figure}
+
+
+\begin{dirtreex}[box=false,pagebreak=true,box={border color=red},line color=blue]
+\dir{E000}{ROOT001\\ROOT002\\ROOT003\\ROOT004\\ROOT005\\ROOT006\\ROOT007\\ROOT008\\ROOT009\\ROOT010\\ROOT011\\ROOT012\\ROOT013\\ROOT014}{
+\file{E001}{C001}
+\file{E002}{C002}
+\file{E003}{C003}
+\file{E004}{C004}
+\file{E005}{C005}
+\file{E006}{C006}
+\file{E007}{C007}
+\file{E008}{C008}
+\file{E009}{C009}
+\file{E010}{C010}
+\file{E011}{C011}
+\file{E012}{C012}
+\file{E013}{C013}
+\file{E014}{C014}
+\file{E015}{C015}
+\file{E016}{C016}
+\file{E017}{C017}
+\file{E018}{C018}
+\file{E019}{C019}
+\file{E020}{C020}
+}
+\end{dirtreex}
+AFTER.
+\end{document}

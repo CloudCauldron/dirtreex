@@ -1,0 +1,93 @@
+% Phase 8B numeric-owner lifetime and iterator contract.
+% Synthetic depths test static data only; nested iteration is not S1 support.
+\documentclass{article}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\OLCalls \newcount\OLInnerCalls \newcount\OLGroup
+\def\OLFail#1{\PackageError{topology-owner-lifetime}{#1}{Owner values, lifetime and callback scope must remain exact.}}
+\def\OLInt#1#2#3{\ifnum#1=#2\relax\else\OLFail{#3}\fi}
+\def\OLSame#1#2#3{\ifx#1#2\else\OLFail{#3}\fi}
+\def\OLField#1#2#3{%
+  \expandafter\let\expandafter\OLActual\csname dte@e#1#2\endcsname
+  \def\OLExpected{#3}\OLSame\OLActual\OLExpected{Wrong raw field #1/#2}}
+\def\OLCleared#1#2{%
+  \expandafter\ifx\csname dte@e#1#2\endcsname\relax
+  \else\OLFail{Stale field #1/#2}\fi}
+\def\OLLoad#1{%
+  \dte@flush@state\global\dte@cnt=0
+  \@for\OLDepth:=#1\do{%
+    \global\advance\dte@cnt by1
+    \expandafter\xdef\csname dte@e\the\dte@cnt d\endcsname{\OLDepth}}}
+\def\OLRow#1#2#3{\OLField{#1}{l}{#2}\OLField{#1}{a}{#3}}
+\def\OLInner#1{%
+  \OLInt{\currentgrouplevel}{\OLGroup}{Nested iterator added a group}%
+  \advance\OLInnerCalls by1
+  \edef\OLInnerTrace{\OLInnerTrace[#1]}}
+\def\OLOuter#1{%
+  \OLInt{\currentgrouplevel}{\OLGroup}{Iterator added a group}%
+  \advance\OLCalls by1
+  \edef\OLTrace{\OLTrace[#1]}%
+  \def\OLTouched{visible}%
+  \ifnum\OLCalls=1
+    \def\OLList{999}%
+    \dte@foreach@owner\OLInnerList\OLInner
+  \fi}
+\begin{document}
+% Literal expectations use future siblings, independent of the recurrence.
+% The deepest row has owners 10,9,8 in depth order, not index order.
+\OLLoad{0,1,2,2,1,2,3,3,2,1,0,1}
+\begingroup
+  \dte@preprocess
+\endgroup
+\OLInt{\dte@cnt}{12}{Long model count}
+\OLRow{1}{0}{}       \OLRow{2}{0}{5}
+\OLRow{3}{0}{5,4}    \OLRow{4}{1}{5}
+\OLRow{5}{0}{10}     \OLRow{6}{0}{10,9}
+\OLRow{7}{0}{10,9,8} \OLRow{8}{1}{10,9}
+\OLRow{9}{1}{10}     \OLRow{10}{1}{}
+\OLRow{11}{1}{}      \OLRow{12}{1}{}
+\typeout{P8B OWNER GLOBAL FIELDS PASS; rows=12}
+
+\def\OLTouched{outside}
+\begingroup
+  \OLGroup=\currentgrouplevel
+  \OLCalls=0 \OLInnerCalls=0
+  \def\OLTrace{}\def\OLInnerTrace{}
+  \def\OLList{}\def\OLInnerList{21,8}
+  \dte@foreach@owner\OLList\OLOuter
+  \OLInt{\OLCalls}{0}{Empty iterator invoked callback}
+  \OLInt{\OLInnerCalls}{0}{Empty iterator invoked nested callback}
+  \def\OLExpected{}\OLSame\OLTrace\OLExpected{Empty iterator emitted an owner}
+  \def\OLExpected{outside}\OLSame\OLTouched\OLExpected{Empty iterator changed state}
+  % Changing the source macro must not alter the already-started traversal.
+  % A nested, different callback must not replace the outer callback.
+  \def\OLList{12,3,104}
+  \dte@foreach@owner\OLList\OLOuter
+  \OLInt{\OLCalls}{3}{Wrong snapshot callback count}
+  \OLInt{\OLInnerCalls}{2}{Wrong nested callback count}
+  \def\OLExpected{[12][3][104]}\OLSame\OLTrace\OLExpected{Owner order or snapshot changed}
+  \def\OLExpected{[21][8]}\OLSame\OLInnerTrace\OLExpected{Nested owner order changed}
+  \def\OLExpected{999}\OLSame\OLList\OLExpected{Callback assignment hidden by grouping}
+  \def\OLExpected{visible}\OLSame\OLTouched\OLExpected{Callback local effect lost}
+\endgroup
+\def\OLExpected{outside}\OLSame\OLTouched\OLExpected{Callback local effect leaked group}
+\typeout{P8B OWNER ITERATOR PASS; empty=0; outer=3; inner=2}
+
+% A shorter model must clear formerly nonempty high slots as well as tail slots.
+\OLLoad{0,1}
+\begingroup\dte@preprocess\endgroup
+\OLInt{\dte@cnt}{2}{Short model count}
+\OLRow{1}{1}{}\OLRow{2}{1}{}
+\OLCleared{7}{a}\OLCleared{7}{l}
+\OLCleared{12}{a}\OLCleared{12}{l}
+\OLLoad{}
+\begingroup\dte@preprocess\endgroup
+\OLInt{\dte@cnt}{0}{Empty model count}
+\OLCleared{1}{a}\OLCleared{1}{l}
+\OLCleared{2}{a}\OLCleared{2}{l}
+\OLCleared{7}{a}\OLCleared{7}{l}
+\OLCleared{12}{a}\OLCleared{12}{l}
+\typeout{P8B OWNER CLEANUP PASS; sizes=12,2,0}
+\noindent TOPOLOGY OWNER LIFETIME PASS
+\end{document}

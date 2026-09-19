@@ -1,0 +1,141 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=400pt,paperheight=300pt,textwidth=320pt,textheight=180pt,top=30pt,left=40pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\PathStyles
+\newcount\PathFormats
+\newwrite\PathNodes
+\immediate\openout\PathNodes=\jobname.nodes
+\let\PathFormat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\PathFormats by1
+  \protected@write\PathNodes{}{ENTRY \PathCase:#1}%
+  \PathFormat{#1}}
+\def\PathApply{%
+  \def\PathExpected{/custom/}%
+  \ifx\pgfkeysdefaultpath\PathExpected\else
+    \PackageError{path-test}{Payload default path changed}{The adapter must retain the path set by earlier keys.}%
+  \fi
+  \global\advance\PathStyles by1
+  \pgfsetdash{{3pt}{2pt}}{0pt}}
+\tikzset{
+  /tikz/pathabsolute/.code={\PathApply},
+  /custom/pathrelative/.code={\PathApply},
+  /custom/line cap/.forward to=/tikz/line cap,
+  line width/.append code={\pgfkeysalso{/custom/.cd}}}
+\def\PathFinish#1{%
+  \ifnum\PathFormats=#1\relax\else
+    \PackageError{path-test}{Entry formatter count changed}{Entries must be formatted once.}%
+  \fi
+  \ifnum\PathStyles>0\else
+    \PackageError{path-test}{No line styles executed}{The selected style must actually execute.}%
+  \fi
+  \typeout{PATH-OK-\PathCase}%
+  \typeout{PATH-STYLES-\PathCase=\the\PathStyles}%
+  \typeout{PATH-FORMATS-\PathCase=\the\PathFormats}}
+\def\PathStart#1{\def\PathCase{#1}\global\PathStyles=0 \global\PathFormats=0 }
+\makeatother
+\begin{document}
+\PathStart{A}
+\begin{dirtreex}[box=true,elbow radius=0pt,line style={/tikz/pathabsolute},pagebreak=false]
+\dir{AR000}{AC000}{
+\dir{AR001}{AC001}{
+\file{AR002}{AC002}
+}
+\file{AR003}{AC003}
+}
+\end{dirtreex}
+\PathFinish{4}
+\clearpage
+\PathStart{B}
+\begin{dirtreex}[box=false,elbow radius=0pt,line style={pathrelative}]
+\dir{BR000}{BC000}{
+\dir{BR001}{BC001}{
+\file{BR002}{BC002}
+\file{BR003}{BC003}
+\file{BR004}{BC004}
+\file{BR005}{BC005}
+\file{BR006}{BC006}
+\file{BR007}{BC007}
+\file{BR008}{BC008}
+\file{BR009}{BC009}
+\file{BR010}{BC010}
+\file{BR011}{BC011}
+\file{BR012}{BC012}
+\file{BR013}{BC013}
+\file{BR014}{BC014}
+\file{BR015}{BC015}
+\file{BR016}{BC016}
+\file{BR017}{BC017}
+\file{BR018}{BC018}
+\file{BR019}{BC019}
+\file{BR020}{BC020}
+\file{BR021}{BC021}
+\file{BR022}{BC022}
+\file{BR023}{BC023}
+\file{BR024}{BC024}
+\file{BR025}{BC025}
+\file{BR026}{BC026}
+\file{BR027}{BC027}
+\file{BR028}{BC028}
+\file{BR029}{BC029}
+\file{BR030}{BC030}
+\file{BR031}{BC031}
+\file{BR032}{BC032}
+\file{BR033}{BC033}
+\file{BR034}{BC034}
+\file{BR035}{BC035}
+}
+\file{BR036}{BC036}
+}
+\end{dirtreex}
+\PathFinish{37}
+\twocolumn
+\PathStart{C}
+\begin{dirtreex}[box=true,elbow radius=2pt,line style={/tikz/pathabsolute}]
+\dir{CR000}{CC000}{
+\dir{CR001}{CC001}{
+\file{CR002}{CC002}
+\file{CR003}{CC003}
+\file{CR004}{CC004}
+\file{CR005}{CC005}
+\file{CR006}{CC006}
+\file{CR007}{CC007}
+\file{CR008}{CC008}
+\file{CR009}{CC009}
+\file{CR010}{CC010}
+\file{CR011}{CC011}
+\file{CR012}{CC012}
+\file{CR013}{CC013}
+\file{CR014}{CC014}
+\file{CR015}{CC015}
+\file{CR016}{CC016}
+\file{CR017}{CC017}
+\file{CR018}{CC018}
+\file{CR019}{CC019}
+\file{CR020}{CC020}
+\file{CR021}{CC021}
+\file{CR022}{CC022}
+\file{CR023}{CC023}
+\file{CR024}{CC024}
+\file{CR025}{CC025}
+\file{CR026}{CC026}
+\file{CR027}{CC027}
+\file{CR028}{CC028}
+\file{CR029}{CC029}
+\file{CR030}{CC030}
+\file{CR031}{CC031}
+\file{CR032}{CC032}
+\file{CR033}{CC033}
+\file{CR034}{CC034}
+\file{CR035}{CC035}
+}
+\file{CR036}{CC036}
+}
+\end{dirtreex}
+\PathFinish{37}
+\typeout{PATH-ALL-CHECKS-PASSED}
+\end{document}

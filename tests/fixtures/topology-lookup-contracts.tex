@@ -1,0 +1,324 @@
+\documentclass{article}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newcount\TModels \newcount\TEntries \newcount\TQueries
+\newcount\TIndex
+\newif\ifTOwnerLists
+\ifdefined\dte@foreach@owner\TOwnerListstrue\else\TOwnerListsfalse\fi
+\def\TFail#1{\PackageError{topology-lookup-contracts}{#1}{Independent parent/sibling oracle failed.}}
+\def\TFlush{%
+ \dte@flush@state
+ \TIndex=1
+ \loop\ifnum\TIndex<\numexpr\dte@cnt+1\relax
+   \expandafter\ifx\csname dte@e\the\TIndex a\endcsname\relax
+   \else\TFail{Active owners survived flush}\fi
+   \expandafter\ifx\csname dte@e\the\TIndex l\endcsname\relax
+   \else\TFail{Last-child flag survived flush}\fi
+   \advance\TIndex by1
+ \repeat}
+\def\TStart#1{%
+ \TFlush\global\dte@cnt=0
+ \@for\TDepth:=#1\do{%
+  \global\advance\dte@cnt by1
+  \expandafter\xdef\csname dte@e\the\dte@cnt d\endcsname{\TDepth}}%
+ \dte@i=701 \dte@j=702 \dte@k=703 \dte@scanidx=704
+ \ifTOwnerLists
+   \def\TPreprocessSentinel{outside-preprocess}%
+   \let\dte@owners\TPreprocessSentinel
+   \let\dte@rootlast\TPreprocessSentinel
+ \fi
+ % a/l must cross the producer's group; its scratch must not.
+ \begingroup\dte@preprocess\endgroup
+ \ifnum\dte@i=701\else\TFail{Preprocess index escaped its group}\fi
+ \ifnum\dte@j=702\else\TFail{Preprocess depth escaped its group}\fi
+ \ifnum\dte@k=703\else\TFail{Preprocess next-depth escaped its group}\fi
+ \ifnum\dte@scanidx=704\else\TFail{Preprocess scan escaped its group}\fi
+ \ifTOwnerLists
+   \ifx\dte@owners\TPreprocessSentinel\else\TFail{Owner scratch escaped its group}\fi
+   \ifx\dte@rootlast\TPreprocessSentinel\else\TFail{Root scratch escaped its group}\fi
+ \fi
+ \global\advance\TModels by1}
+\def\TProject#1{%
+ \edef\TReadList{#1}%
+ \ifTOwnerLists
+   \let\TActual\@empty
+   \@for\TItem:=\TReadList\do{%
+     \edef\TItemDepth{\dte@eget{\TItem}{d}}%
+     \ifx\TActual\@empty
+       \let\TActual\TItemDepth
+     \else
+       \edef\TActual{\TActual,\TItemDepth}%
+     \fi}%
+ \else
+   \let\TActual\TReadList
+ \fi}
+\def\TEntry#1#2#3{%
+ \ifnum\dte@eget{#1}{l}=#2\relax\else\TFail{Wrong last-child flag}\fi
+ \TProject{\dte@eget{#1}{a}}\def\TExpected{#3}%
+ \ifx\TActual\TExpected\else\TFail{Wrong ordered active-depth set}\fi
+ \global\advance\TEntries by1}
+% Read actual production data. Only the legacy representation needs its
+% production Q helper to recover the owner of a stored depth.
+\def\TReadOwner#1#2#3{%
+ \edef\TReadList{#2}\def\TFound{0}%
+ \@for\TItem:=\TReadList\do{%
+   \ifTOwnerLists
+     \ifnum\TItem>#1\relax\else\TFail{Stored owner is not a future entry}\fi
+     \ifnum\TItem>\dte@cnt\TFail{Stored owner is outside this tree}\fi
+     \edef\TItemDepth{\dte@eget{\TItem}{d}}%
+   \else
+     \let\TItemDepth\TItem
+   \fi
+   \ifnum\TItemDepth=#3\relax
+     \ifnum\TFound=0\else\TFail{Repeated stored owner depth}\fi
+     \ifTOwnerLists
+       \let\TFound\TItem
+     \else
+       \dte@find@nextsibling{#1}{#3}\let\TFound\dte@nextidx
+     \fi
+   \fi}}
+\def\TBoundaryDomain#1{%
+ \TProject{\dte@safeget{dte@breaklines@1}}%
+ \def\TPreviousDepth{-1}%
+ \@for\TItemDepth:=\TActual\do{%
+   \ifnum\TItemDepth>\TPreviousDepth\relax
+   \else\TFail{Boundary depths are not unique and ordered}\fi
+   \ifnum\TItemDepth>\numexpr\dte@eget{#1}{d}+1\relax
+     \TFail{Boundary column exceeds active/feed depth domain}%
+   \fi
+   \let\TPreviousDepth\TItemDepth}}
+\def\TQuery#1#2#3{%
+ \ifTOwnerLists\else
+   % The original helper's grouped/global result remains a control-only check.
+   \begingroup\dte@find@nextsibling{#1}{#2}\endgroup
+   \ifnum\dte@nextidx=#3\relax\else\TFail{Wrong style owner or nonglobal query result}\fi
+ \fi
+ \def\TBoundarySentinel{outside-boundary}%
+ \expandafter\let\csname dte@breaklines@1\endcsname\TBoundarySentinel
+ \expandafter\let\csname dte@breakidx@1\endcsname\TBoundarySentinel
+ \begingroup
+   % Each original oracle row now also checks actual active/boundary storage.
+   % Q at depth zero below a nonroot row has no consumer: require absence.
+   \def\TExpectedActive{0}%
+   \ifnum#2>0
+     \ifnum#2>\dte@eget{#1}{d}\relax\else
+       \def\TExpectedActive{#3}%
+     \fi
+   \fi
+   \let\TExpectedBoundary\TExpectedActive
+   \ifnum\dte@eget{#1}{d}=0
+     \ifnum#2=0 \def\TExpectedBoundary{#3}\fi
+   \fi
+   \ifnum#2>\dte@eget{#1}{d}\relax
+     \ifnum#3=\numexpr#1+1\relax
+       \def\TExpectedBoundary{#3}%
+     \fi
+   \fi
+   \TReadOwner{#1}{\dte@safeget{dte@e#1a}}{#2}%
+   \ifnum\TFound=\TExpectedActive\relax\else\TFail{Wrong stored active owner or absence}\fi
+   \dte@store@breaklines{#1}{1}%
+   \ifnum\dte@safeget{dte@breakidx@1}=#1\relax\else\TFail{Wrong stored boundary cut index}\fi
+   \TBoundaryDomain{#1}%
+   \TReadOwner{#1}{\dte@safeget{dte@breaklines@1}}{#2}%
+   \ifnum\TFound=\TExpectedBoundary\relax\else\TFail{Wrong stored boundary owner or absence}\fi
+ \endgroup
+ \expandafter\ifx\csname dte@breaklines@1\endcsname\TBoundarySentinel
+ \else\TFail{Boundary owner list escaped its group}\fi
+ \expandafter\ifx\csname dte@breakidx@1\endcsname\TBoundarySentinel
+ \else\TFail{Boundary cut index escaped its group}\fi
+ % queries counts checked frozen oracle rows, not calls to a removed helper.
+ \global\advance\TQueries by1}
+\begin{document}
+\TStart{}
+\TStart{0}
+\TEntry{1}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{0}
+\TStart{0,0,0}
+\TEntry{1}{0}{}
+\TEntry{2}{0}{}
+\TEntry{3}{1}{}
+\TQuery{1}{0}{2}
+\TQuery{1}{1}{0}
+\TQuery{2}{0}{3}
+\TQuery{2}{1}{0}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{0}
+\TStart{0,1,1}
+\TEntry{1}{1}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{0}
+\TQuery{2}{1}{3}
+\TQuery{2}{2}{0}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{0}
+\TQuery{3}{2}{0}
+\TStart{0,1,2,3}
+\TEntry{1}{1}{}
+\TEntry{2}{1}{}
+\TEntry{3}{1}{}
+\TEntry{4}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{0}
+\TQuery{2}{1}{0}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{0}
+\TQuery{3}{2}{0}
+\TQuery{3}{3}{4}
+\TQuery{4}{0}{0}
+\TQuery{4}{1}{0}
+\TQuery{4}{2}{0}
+\TQuery{4}{3}{0}
+\TQuery{4}{4}{0}
+\TStart{0,1,2,1}
+\TEntry{1}{1}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{1}{1}
+\TEntry{4}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{0}
+\TQuery{2}{1}{4}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{4}
+\TQuery{3}{2}{0}
+\TQuery{3}{3}{0}
+\TQuery{4}{0}{0}
+\TQuery{4}{1}{0}
+\TQuery{4}{2}{0}
+\TStart{0,1,2,2,1,2}
+\TEntry{1}{1}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{0}{1,2}
+\TEntry{4}{1}{1}
+\TEntry{5}{1}{}
+\TEntry{6}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{0}
+\TQuery{2}{1}{5}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{5}
+\TQuery{3}{2}{4}
+\TQuery{3}{3}{0}
+\TQuery{4}{0}{0}
+\TQuery{4}{1}{5}
+\TQuery{4}{2}{0}
+\TQuery{4}{3}{0}
+\TQuery{5}{0}{0}
+\TQuery{5}{1}{0}
+\TQuery{5}{2}{6}
+\TQuery{6}{0}{0}
+\TQuery{6}{1}{0}
+\TQuery{6}{2}{0}
+\TQuery{6}{3}{0}
+\TStart{0,1,2,1,0,1}
+\TEntry{1}{0}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{1}{1}
+\TEntry{4}{1}{}
+\TEntry{5}{1}{}
+\TEntry{6}{1}{}
+\TQuery{1}{0}{5}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{5}
+\TQuery{2}{1}{4}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{5}
+\TQuery{3}{1}{4}
+\TQuery{3}{2}{0}
+\TQuery{3}{3}{0}
+\TQuery{4}{0}{5}
+\TQuery{4}{1}{0}
+\TQuery{4}{2}{0}
+\TQuery{5}{0}{0}
+\TQuery{5}{1}{6}
+\TQuery{6}{0}{0}
+\TQuery{6}{1}{0}
+\TQuery{6}{2}{0}
+\TStart{0,1,2,3,3,2,1}
+\TEntry{1}{1}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{0}{1,2}
+\TEntry{4}{0}{1,2,3}
+\TEntry{5}{1}{1,2}
+\TEntry{6}{1}{1}
+\TEntry{7}{1}{}
+\TQuery{1}{0}{0}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{0}
+\TQuery{2}{1}{7}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{0}
+\TQuery{3}{1}{7}
+\TQuery{3}{2}{6}
+\TQuery{3}{3}{4}
+\TQuery{4}{0}{0}
+\TQuery{4}{1}{7}
+\TQuery{4}{2}{6}
+\TQuery{4}{3}{5}
+\TQuery{4}{4}{0}
+\TQuery{5}{0}{0}
+\TQuery{5}{1}{7}
+\TQuery{5}{2}{6}
+\TQuery{5}{3}{0}
+\TQuery{5}{4}{0}
+\TQuery{6}{0}{0}
+\TQuery{6}{1}{7}
+\TQuery{6}{2}{0}
+\TQuery{6}{3}{0}
+\TQuery{7}{0}{0}
+\TQuery{7}{1}{0}
+\TQuery{7}{2}{0}
+\TStart{0,1,2,3,2,1,0,1,2}
+\TEntry{1}{0}{}
+\TEntry{2}{0}{1}
+\TEntry{3}{0}{1,2}
+\TEntry{4}{1}{1,2}
+\TEntry{5}{1}{1}
+\TEntry{6}{1}{}
+\TEntry{7}{1}{}
+\TEntry{8}{1}{}
+\TEntry{9}{1}{}
+\TQuery{1}{0}{7}
+\TQuery{1}{1}{2}
+\TQuery{2}{0}{7}
+\TQuery{2}{1}{6}
+\TQuery{2}{2}{3}
+\TQuery{3}{0}{7}
+\TQuery{3}{1}{6}
+\TQuery{3}{2}{5}
+\TQuery{3}{3}{4}
+\TQuery{4}{0}{7}
+\TQuery{4}{1}{6}
+\TQuery{4}{2}{5}
+\TQuery{4}{3}{0}
+\TQuery{4}{4}{0}
+\TQuery{5}{0}{7}
+\TQuery{5}{1}{6}
+\TQuery{5}{2}{0}
+\TQuery{5}{3}{0}
+\TQuery{6}{0}{7}
+\TQuery{6}{1}{0}
+\TQuery{6}{2}{0}
+\TQuery{7}{0}{0}
+\TQuery{7}{1}{8}
+\TQuery{8}{0}{0}
+\TQuery{8}{1}{0}
+\TQuery{8}{2}{9}
+\TQuery{9}{0}{0}
+\TQuery{9}{1}{0}
+\TQuery{9}{2}{0}
+\TQuery{9}{3}{0}
+\TFlush
+\typeout{R8-TOPOLOGY-PASSED models=\the\TModels;entries=\the\TEntries;queries=\the\TQueries}
+Topology lookup verified.
+\end{document}

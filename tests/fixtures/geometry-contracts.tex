@@ -1,0 +1,151 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[paperwidth=380pt,paperheight=390pt,textwidth=290pt,textheight=280pt,top=35pt,left=40pt]{geometry}
+\usepackage{dirtreex}
+\pagestyle{empty}
+\makeatletter
+\newif\ifGeometryActive
+\newif\ifGeometryBackground
+\newcount\GeometryPaths
+\newcount\GeometryPaints
+\newcount\GeometryPictures
+\newcount\GeometryBegin
+\newcount\GeometryEnd
+\newcount\GeometryFormatted
+\newcount\GeometryHboxes
+\newcount\GeometryVboxes
+\newcount\GeometryMeasured
+\newcount\GeometryCases
+\newdimen\GeometryExpected
+\newdimen\GeometryMinX
+\newdimen\GeometryMaxX
+\newdimen\GeometryMinY
+\newdimen\GeometryMaxY
+\newwrite\GeometryEvents
+\newwrite\GeometryBounds
+\immediate\openout\GeometryEvents=\jobname.events
+\immediate\openout\GeometryBounds=\jobname.bounds
+\def\GeometryError#1{\PackageError{geometry-contracts}{#1}{The frozen control and candidate must satisfy the same geometry contract.}}
+\def\GeometryInt#1#2#3{\ifnum#1=#2\relax\else\GeometryError{#3}\fi}
+\def\GeometryDim#1#2#3{\GeometryExpected=\dimexpr#2\relax
+  \ifdim#1=\GeometryExpected\else\GeometryError{#3}\fi}
+% Two retained option macros start with deliberately different values.
+% Path-local options choose the actual left margin and top-left radius.
+\def\GeometryLeft{13pt}
+\def\GeometryTL{7pt}
+\def\GeometryOnPath{%
+  \ifGeometryActive
+    \global\advance\GeometryPaths by1
+    \ifnum\GeometryPaths=1
+      \ifGeometryBackground\GeometryError{Content node moved to background}\fi
+    \else
+      \ifGeometryBackground
+        \GeometryInt\GeometryPaths{2}{Background fill order changed}%
+        \def\GeometryLeft{9pt}\def\GeometryTL{1pt}%
+      \else
+        \GeometryInt\GeometryPaths{3}{Foreground stroke order changed}%
+        \def\GeometryLeft{11pt}\def\GeometryTL{3pt}%
+      \fi
+    \fi
+  \fi}
+\tikzset{
+  geometry late/.code=\GeometryOnPath,
+  geometry background/.code=\GeometryBackgroundtrue,
+  every path/.append style={geometry late},
+  every on background layer/.append style={geometry background},
+  every picture/.append style={
+    execute at begin picture={\ifGeometryActive\global\advance\GeometryBegin by1\fi},
+    execute at end picture={\ifGeometryActive
+      \global\advance\GeometryEnd by1
+      \immediate\write\GeometryBounds{PICTURE \GeometryCase:
+        \the\pgf@picminx,\the\pgf@picminy,\the\pgf@picmaxx,\the\pgf@picmaxy}%
+    \fi}}}
+\let\GeometryUsePath\pgfusepath
+\def\pgfusepath#1{%
+  \ifGeometryActive\ifnum\GeometryPaths>1
+    \global\advance\GeometryPaints by1
+    \GeometryMinX=\pgf@pathminx \GeometryMaxX=\pgf@pathmaxx
+    \GeometryMinY=\pgf@pathminy \GeometryMaxY=\pgf@pathmaxy
+    % These bounds follow directly from the named content rectangle and
+    % four margins; no production contour/helper is used as the oracle.
+    \pgfpointanchor{dte@content}{south west}%
+    \GeometryDim\GeometryMinX{\pgf@x-\GeometryLeft}{Wrong left contour bound}%
+    \GeometryDim\GeometryMinY{\pgf@y-8pt}{Wrong bottom contour bound}%
+    \pgfpointanchor{dte@content}{north east}%
+    \GeometryDim\GeometryMaxX{\pgf@x+7pt}{Wrong right contour bound}%
+    \GeometryDim\GeometryMaxY{\pgf@y+6pt}{Wrong top contour bound}%
+    \pgfgetpath\GeometrySoftPath
+    \immediate\write\GeometryEvents{PATH \GeometryCase/\the\GeometryPaths:
+      #1;left=\GeometryLeft;tl=\GeometryTL; \meaning\GeometrySoftPath}%
+    \immediate\write\GeometryBounds{PATH \GeometryCase/\the\GeometryPaths:
+      \the\GeometryMinX,\the\GeometryMinY,\the\GeometryMaxX,\the\GeometryMaxY}%
+  \fi\fi
+  \GeometryUsePath{#1}}
+\let\GeometryWhole\dte@output@singleframe
+\def\dte@output@singleframe{%
+  \global\advance\GeometryPictures by1
+  \GeometryActivetrue
+  \GeometryWhole
+  \GeometryActivefalse}
+\let\GeometryBoxSingle\dte@box@single
+\def\dte@box@single#1#2{%
+  \global\advance\GeometryMeasured by1
+  \GeometryBoxSingle#1#2}
+\let\GeometryFormat\DirtreexFormatName
+\renewcommand\DirtreexFormatName[1]{%
+  \global\advance\GeometryFormatted by1
+  \GeometryFormat{#1}}
+\def\GeometryStart#1#2{%
+  \def\GeometryCase{#1}\def\GeometryExpectedMeasured{#2}%
+  \global\GeometryMeasured=0 \global\GeometryPaths=0 \global\GeometryPaints=0
+  \global\GeometryPictures=0 \global\GeometryBegin=0 \global\GeometryEnd=0
+  \global\GeometryFormatted=0 \global\GeometryHboxes=0 \global\GeometryVboxes=0
+  \everyhbox\expandafter{\the\everyhbox\global\advance\GeometryHboxes by1}%
+  \everyvbox\expandafter{\the\everyvbox\global\advance\GeometryVboxes by1}}
+\def\GeometryFinish{%
+  \GeometryInt\GeometryMeasured{\GeometryExpectedMeasured}{Whole-picture measurement count changed}%
+  \GeometryInt\GeometryPictures{1}{Whole output was rerendered or skipped}%
+  \GeometryInt\GeometryPaths{3}{Expected content, fill, stroke paths}%
+  \GeometryInt\GeometryPaints{2}{Expected one fill and one stroke action}%
+  \GeometryInt\GeometryBegin{1}{Begin-picture hook count changed}%
+  \GeometryInt\GeometryEnd{1}{End-picture hook count changed}%
+  \GeometryInt\GeometryFormatted{3}{Semantic formatting count changed}%
+  \GeometryDim{\GeometryLeft}{13pt}{Path-local left margin leaked}%
+  \GeometryDim{\GeometryTL}{7pt}{Path-local radius leaked}%
+  \typeout{GEOMETRY-MEASURED \GeometryCase: \the\GeometryMeasured}%
+  \typeout{GEOMETRY-COUNTS \GeometryCase: \the\GeometryHboxes,\the\GeometryVboxes}%
+  \typeout{GEOMETRY-OK \GeometryCase}%
+  \global\advance\GeometryCases by1}
+\AtEndDocument{\GeometryInt\GeometryCases{2}{Missing geometry scenario}%
+  \typeout{GEOMETRY-ALL-CHECKS-PASSED}}
+\makeatother
+\begin{document}
+\begingroup
+\GeometryStart{DIRECT}{0}
+\begin{dirtreex}[pagebreak=false,
+  box={corners={\GeometryTL,2pt,4pt,5pt},
+       margin={6pt,7pt,8pt,\GeometryLeft},
+       border width=1.5pt,border color=blue!70!black,background color=cyan!15}]
+\dir{DIRECTROOT}{DCROOT}{
+  \file{DIRECTONE}{DCONE}
+  \file{DIRECTTWO}{DCTWO}
+}
+\end{dirtreex}
+\GeometryFinish
+\endgroup
+\clearpage
+\begingroup
+\GeometryStart{FITTED}{1}
+\begin{dirtreex}[pagebreak=true,
+  box={corners={\GeometryTL,2pt,4pt,5pt},
+       margin={6pt,7pt,8pt,\GeometryLeft},
+       border width=1.5pt,border color=blue!70!black,background color=cyan!15}]
+\dir{FITTEDROOT}{FCROOT}{
+  \file{FITTEDONE}{FCONE}
+  \file{FITTEDTWO}{FCTWO}
+}
+\end{dirtreex}
+\GeometryFinish
+\endgroup
+\end{document}
