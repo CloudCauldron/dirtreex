@@ -76,8 +76,7 @@
 \newcount\dte@i           % general-purpose outer-loop counter
 \newcount\dte@j           % general-purpose inner-loop counter
 \newcount\dte@k           % general-purpose third-level counter
-\newcount\dte@scanidx     % linear entry scan index
-\newcount\dte@probeIdx    % active-line probe index
+\newcount\dte@scanidx     % next-root scan at an actual boundary
 \newcount\dte@pagecount   % continuation index (0 during first-piece fitting)
 \newcount\dte@defercount  % consecutive deferrals without committed tree content
 \newcount\dte@breakcount  % number of recorded page/column breaks
@@ -294,8 +293,6 @@
 %% - Picture: piecenum crosses measurement/TikZ groups globally; discard
 %%   reverses a rejected trial's increment. It is reset before rendering.
 %%   Preliminary whole-output assessments do not advance this ordinal.
-%% - Helper result: nextidx is a global integer macro, overwritten on each
-%%   sibling lookup and read immediately by callers, not persistent data.
 %% Clear every per-entry global left over from a previous dirtreex
 %% environment, before \dte@cnt is reset to zero. Break tables are
 %% local to their environment and need no explicit cleanup.
@@ -364,9 +361,10 @@
 %% lw,er  Width/radius dimension tokens, capture-time \xdef; empty means
 %%        inherit rulewidth/elbowR. Private; dimensions are read at use.
 %% l      Last-child integer flag (1=yes, 0=no), preprocessing \xdef; private.
-%% a      Ascending comma-separated active positive depths, preprocessing
-%%        \xdef; empty means none. Unique and bounded by the entry's depth.
-%%        Its own positive depth is included when a later sibling exists.
+%% a      Comma-separated future-owner indexes for active positive depths,
+%%        preprocessing \xdef; empty means none. Ordered by owner depth,
+%%        not index. Owner depths are unique and bounded by this entry's
+%%        depth; its own positive depth is active when a later sibling exists.
 %%
 %% All fields are populated by capture or preprocessing before rendering.
 %% d/t/n/c/i/l require their producer; no missing-slot fallback is supplied.
@@ -386,12 +384,13 @@
 %% dte@pos@N: dimension literal, render-time global \xdef; natural row
 %%   coordinate used for connector differences, not a shipout position.
 %%   Cleared with the fields; must be produced before geometric use.
-%% dte@breaklines@B / dte@breakidx@B: unique ascending boundary depths /
-%%   last-entry integer at 1-based break B, environment-local \edef using
-%%   current topology and prior-run page/column boundaries. The list includes
-%%   a first-child feed on descent and preserves the legacy depth-zero
-%%   fallback; see \dte@store@breaklines. Built before rows; missing records
-%%   skip extensions.
+%% dte@breaklines@B / dte@breakidx@B: boundary-owner indexes in ascending
+%%   depth order / last-entry integer at 1-based break B, environment-local
+%%   \edef using current topology and prior-run page/column boundaries.
+%%   Owner depths are unique. The list includes a first-child feed on
+%%   descent and the legacy depth-zero fallback; see \dte@store@breaklines.
+%%   Built before rows; missing records skip extensions. Numeric owners
+%%   are cached here; styles are still resolved when each line is drawn.
 %% Location labels dte<tnum>.<N> persist in the aux file: zref abspage,
 %%   plus PGF horizontal origin in outer two-column mode. The lookup uses
 %%   page 0 when absent and requests a rerun for missing page/column data.
@@ -559,99 +558,70 @@
 %% ============================================================
 %%  Preprocessing (runs after the body is captured)
 %% ============================================================
+%% Walk backwards. At entry i, keep the next row's owners whose depths
+%% are below the next row's depth and at most this row's depth; then add
+%% i+1 if its positive depth is at most this row's depth. This preserves
+%% ascending active depths and their exact future style owners.
+%% i/j/k are local index/current-depth/next-depth scratch. owners and
+%% rootlast are initialized on every call; only the l/a outputs are global.
 \def\dte@preprocess{%
-  \dte@i=1\relax
-  \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
-    \dte@computelast{\the\dte@i}%
-    \advance\dte@i by 1\relax
-  \repeat
-  \dte@computeactive
-}
-
-%% ------------------------------------------------------------
-%%  Is-last-child flag.
-%%
-%%  Scans forward from entry #1; entry is "last child" iff no
-%%  subsequent entry at the same depth exists before the scan
-%%  encounters a strictly shallower depth (which marks leaving
-%%  the subtree).
-\def\dte@computelast#1{%
-  \edef\dte@cld{\dte@eget{#1}{d}}%
-  \expandafter\xdef\csname dte@e#1l\endcsname{1}%
-  \dte@scanidx=#1\relax
-  \dte@cll@loop{#1}%
-}
-\def\dte@cll@loop#1{%
-  \advance\dte@scanidx by 1\relax
-  \ifnum\dte@scanidx>\dte@cnt\relax\else
-    \edef\dte@nxtd{\dte@eget{\the\dte@scanidx}{d}}%
-    \ifnum\dte@nxtd=\dte@cld\relax
-      % Sibling found -> NOT last child.
-      \expandafter\xdef\csname dte@e#1l\endcsname{0}%
-    \else
-      \ifnum\dte@nxtd>\dte@cld\relax
-        \dte@cll@loop{#1}%
+  \dte@i=\dte@cnt
+  \dte@k=0
+  \def\dte@owners{}%
+  \def\dte@rootlast{1}%
+  \loop\ifnum\dte@i>0
+    \dte@j=\dte@eget{\the\dte@i}{d}\relax
+    \ifx\dte@owners\@empty\else
+      \edef\dte@owners{\expandafter\dte@filter@owners\dte@owners,0,}%
+    \fi
+    \ifnum\dte@k>0
+      \ifnum\dte@k>\dte@j\else
+        \edef\dte@owners{\dte@owners,\the\numexpr\dte@i+1\relax}%
       \fi
     \fi
-  \fi
-}
-
-%% ------------------------------------------------------------
-%%  Active vertical lines at each entry.
-%%
-%%  For every entry, compute the list of positive depths at
-%%  which a vertical trunk should be drawn -- i.e. depths that
-%%  still have a future sibling to connect to. Stored per entry
-%%  as a comma-separated list in \dte@e<N>a. Stored without a
-%%  leading comma so every downstream \@for iteration sees a
-%%  real element (no empty first iteration to guard against).
-%%  Probing each depth in 1..current depth once makes this an
-%%  ascending set; a deeper first-child column is not in it.
-\def\dte@computeactive{%
-  \dte@i=1\relax
-  \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
-    \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{}%
-    \edef\dte@cad{\dte@eget{\the\dte@i}{d}}%
-    \dte@j=1\relax
-    \dte@ca@depthloop
-    \advance\dte@i by 1\relax
+    \ifx\dte@owners\@empty\else
+      \edef\dte@owners{\expandafter\@gobble\dte@owners}%
+    \fi
+    \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{\dte@owners}%
+    \def\dte@last{1}%
+    \ifnum\dte@j=0
+      \let\dte@last\dte@rootlast
+      \def\dte@rootlast{0}%
+    \else
+      \dte@foreach@owner\dte@owners\dte@mark@notlast
+    \fi
+    \expandafter\xdef\csname dte@e\the\dte@i l\endcsname{\dte@last}%
+    \dte@k=\dte@j
+    \advance\dte@i by-1
   \repeat
 }
-\def\dte@ca@depthloop{%
-  \ifnum\dte@j>\dte@cad\relax\else
-    \dte@ca@probe{\the\dte@j}%
-    \advance\dte@j by 1\relax
-    \expandafter\dte@ca@depthloop
-  \fi
-}
-\def\dte@ca@probe#1{%
-  \dte@probeIdx=\dte@i\relax
-  \dte@ca@probe@loop{#1}%
-}
-\def\dte@ca@probe@loop#1{%
-  \advance\dte@probeIdx by 1\relax
-  \ifnum\dte@probeIdx>\dte@cnt\relax\else
-    \edef\dte@pd{\dte@eget{\the\dte@probeIdx}{d}}%
-    \ifnum\dte@pd=#1\relax
-      % Sibling found at this depth -> active. Store bare on the
-      % first append, or concatenate with a leading comma on every
-      % subsequent append. This keeps \dte@e<N>a free of a leading
-      % comma so consumers never need an empty-first-iteration guard.
-      \expandafter\ifx\csname dte@e\the\dte@i a\endcsname\@empty
-        \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{#1}%
-      \else
-        \expandafter\xdef\csname dte@e\the\dte@i a\endcsname{%
-          \csname dte@e\the\dte@i a\endcsname,#1}%
-      \fi
-    \else
-      \ifnum\dte@pd<#1\relax
-        % Left the subtree at this depth -> not active.
-      \else
-        \dte@ca@probe@loop{#1}%
-      \fi
+%% Expandable filter: each retained owner contributes one comma and index.
+%% A single expansion builds the list without repeated growing-prefix copies.
+%% The zero sentinel is not an entry and never reaches the depth accessor.
+\def\dte@filter@owners#1,{%
+  \ifnum#1>0 %
+    \ifnum\dte@eget{#1}{d}<\dte@k
+      \ifnum\dte@eget{#1}{d}>\dte@j\else,#1\fi
     \fi
-  \fi
-}
+    \expandafter\dte@filter@owners
+  \fi}
+
+%% Iterate a macro containing a nonempty-owner CSV, or the empty list.
+%% Carry the callback token through the recursion: no shared body state,
+%% grouping, or repeated capture of the remaining list as in \@for.
+\def\dte@foreach@owner#1#2{%
+  \ifx#1\@empty\else
+    \expandafter\dte@owner@loop\expandafter#2#1,0,%
+  \fi}
+\def\dte@owner@loop#1#2,{%
+  \ifnum#2>0 %
+    #1{#2}%
+    \expandafter\dte@owner@loop\expandafter#1%
+  \fi}
+\def\dte@mark@notlast#1{%
+  \ifnum\dte@eget{#1}{d}=\dte@j
+    \def\dte@last{0}%
+  \fi}
 
 %% ============================================================
 %%  Rendering helpers
@@ -983,32 +953,6 @@
 }
 
 %% ------------------------------------------------------------
-%%  Find the next entry at depth #2 that lies strictly after
-%%  entry #1. Matches the subtree semantics of
-%%  \dte@ca@probe@loop: scan forward while depth > #2; stop at
-%%  depth = #2 (sibling found) or depth < #2 (left the subtree).
-%%  Returns the integer macro \dte@nextidx globally (0 if none), overwriting
-%%  the previous result; scanidx/fnd are caller-local scratch. No rendering.
-\def\dte@find@nextsibling#1#2{%
-  \gdef\dte@nextidx{0}%
-  \dte@scanidx=#1\relax
-  \dte@fn@loop{#2}%
-}
-\def\dte@fn@loop#1{%
-  \advance\dte@scanidx by 1\relax
-  \ifnum\dte@scanidx>\dte@cnt\relax\else
-    \edef\dte@fnd{\dte@eget{\the\dte@scanidx}{d}}%
-    \ifnum\dte@fnd=#1\relax
-      \xdef\dte@nextidx{\the\dte@scanidx}%
-    \else
-      \ifnum\dte@fnd>#1\relax
-        \dte@fn@loop{#1}%
-      \fi
-    \fi
-  \fi
-}
-
-%% ------------------------------------------------------------
 %%  Pass-through vertical lines at active depths.
 %%
 %%  A pass-through segment is the stretch of the vertical trunk
@@ -1040,16 +984,12 @@
   % The connector additionally caps its radius by its own stem.
   \dte@resolve@elbow{#1}\dte@pt@er\dte@ptE
   \dte@clampelbow\dte@ptE
-  \@for\dte@alvl:=\dte@actlist\do{%
-    % \dte@actlist is built without a leading comma (see
-    % \dte@ca@probe@loop), so every iteration here sees a real
-    % active-depth value.
-    \dte@k=\dte@alvl\relax
+  % Bind the current entry's #1 while the iterator supplies each owner.
+  \def\dte@draw@passcolumn##1{%
+    \def\dte@pt@src{##1}%
+    % Each active column carries the future entry whose style it uses.
+    \dte@k=\dte@eget{\dte@pt@src}{d}\relax
     \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
-    % Style source for this column = the next sibling at this
-    % active depth (the entry whose elbow the line leads into).
-    \dte@find@nextsibling{#1}{\the\dte@k}%
-    \let\dte@pt@src\dte@nextidx
     \dte@resolve@lc{\dte@pt@src}\dte@pt@lc
     \dte@resolve@lw{\dte@pt@src}\dte@pt@lw
     \dte@resolve@ls{\dte@pt@src}\dte@pt@ls
@@ -1122,6 +1062,7 @@
       }%
     \fi
   }%
+  \dte@foreach@owner\dte@actlist\dte@draw@passcolumn
   \dte@tempdim=\dte@save@tempdim\relax
 }
 
@@ -2590,6 +2531,31 @@
   \fi
 }
 
+%% Boundary-owner callbacks run inside the existing picture. The owner
+%% was fixed when break data was built; its style is resolved here.
+\def\dte@draw@topcolumn#1{%
+  \def\dte@ext@src{#1}%
+  \dte@k=\dte@eget{\dte@ext@src}{d}\relax
+  \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
+  \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
+  \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
+  \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
+  \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
+    ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
+    ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
+}
+\def\dte@draw@bottomcolumn#1{%
+  \def\dte@ext@src{#1}%
+  \dte@k=\dte@eget{\dte@ext@src}{d}\relax
+  \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
+  \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
+  \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
+  \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
+  \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
+    ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
+    ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
+}
+
 %% ------------------------------------------------------------
 %%  Draw one piece with a partial frame.
 %%  H/V output: start a paragraph if needed, consume splitresult, run
@@ -2766,19 +2732,7 @@
         \relax
       \else
         \edef\dte@prevbk{\dte@safeget{dte@breaklines@\the\numexpr\dte@piecenum-1\relax}}%
-        \edef\dte@bkidx{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
-        \@for\dte@extlvl:=\dte@prevbk\do{%
-          \dte@k=\dte@extlvl\relax
-          \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
-          \dte@find@nextsibling{\dte@bkidx}{\the\dte@k}%
-          \let\dte@ext@src\dte@nextidx
-          \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
-          \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
-          \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
-          \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
-            ([xshift=\dte@tempdim,yshift=0pt]dte@content.north west)--
-            ([xshift=\dte@tempdim,yshift=-\dte@leader@dim-0.3\dte@bls]dte@content.north west);
-        }%
+        \dte@foreach@owner\dte@prevbk\dte@draw@topcolumn
       \fi
     \fi
     %
@@ -2810,19 +2764,7 @@
         \fi
         \edef\dte@extTopY{-\the\dte@tempdim}%
         \edef\dte@curbk{\dte@safeget{dte@breaklines@\the\dte@piecenum}}%
-        \edef\dte@bkidx{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
-        \@for\dte@extlvl:=\dte@curbk\do{%
-          \dte@k=\dte@extlvl\relax
-          \dte@tempdim=\dimexpr\numexpr\dte@k-1\relax\dte@all+\dte@offset\relax
-          \dte@find@nextsibling{\dte@bkidx}{\the\dte@k}%
-          \let\dte@ext@src\dte@nextidx
-          \dte@resolve@lc{\dte@ext@src}\dte@ext@lc
-          \dte@resolve@lw{\dte@ext@src}\dte@ext@lw
-          \dte@resolve@ls{\dte@ext@src}\dte@ext@ls
-          \draw[\dte@ext@lc,line width=\dte@ext@lw,/tikz/dte@line style=\dte@ext@ls]
-            ([xshift=\dte@tempdim,yshift=\dte@extTopY]dte@content.north west)--
-            ([xshift=\dte@tempdim,yshift=0pt]dte@content.south west);
-        }%
+        \dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn
       \fi
     \fi
     \dte@endbounds
@@ -2869,20 +2811,25 @@
   \edef\dte@bklist{\dte@safeget{dte@e#1a}}%
   \ifnum\dte@eget{#1}{d}=0\relax
     \ifnum\dte@eget{#1}{l}=0\relax
-      \def\dte@bklist{0}%
+      % l=0 guarantees a later root. Resolve it once for both painters;
+      % scans at distinct root boundaries cover disjoint entry intervals.
+      \dte@scanidx=\numexpr#1+1\relax
+      \@whilenum\dte@eget{\the\dte@scanidx}{d}>0\do{%
+        \advance\dte@scanidx by 1\relax}%
+      \edef\dte@bklist{\the\dte@scanidx}%
     \fi
   \fi
   % On descent the immediate child's depth exceeds every active
   % depth. Append it once; both painters then use the same list.
-  % The next-entry lookup at this depth returns that first child.
+  % Its owner is the immediate next entry; no topology lookup is needed.
   \dte@scratchcnt=\numexpr#1+1\relax
   \ifnum\dte@scratchcnt>\dte@cnt\else
     \edef\dte@firstd{\dte@eget{\number\dte@scratchcnt}{d}}%
     \ifnum\dte@firstd>\dte@eget{#1}{d}\relax
       \ifx\dte@bklist\@empty
-        \let\dte@bklist\dte@firstd
+        \edef\dte@bklist{\the\dte@scratchcnt}%
       \else
-        \edef\dte@bklist{\dte@bklist,\dte@firstd}%
+        \edef\dte@bklist{\dte@bklist,\the\dte@scratchcnt}%
       \fi
     \fi
   \fi
