@@ -99,6 +99,9 @@
 \newdimen\dte@bls         % tree's baselineskip, captured under the tree font
 \newdimen\dte@tempdim     % shared scratch; callers preserve values needed across helpers
 \newdimen\dte@availht     % raw split target; distinct from physical room/picture extent
+\newdimen\dte@fitroom     % current assessment/fitter's room; see box-output contracts
+\newdimen\dte@fitht       % measured height charge, including first-piece spacing
+\newdimen\dte@savedsplitdepth % caller's splitmaxdepth across a temporary split cap
 \newdimen\dte@elbowR      \dte@elbowR=0pt       % elbow-arc radius (0pt = sharp `└`/`├`)
 \newdimen\dte@ptE         % pass-through effective elbow radius (clamped connE)
 \newdimen\dte@ptRaise     % pass-through upper-half raise
@@ -1449,7 +1452,7 @@
 %% ============================================================
 %% Integration owners and observation boundaries:
 %% - compute@capacity reads physical room in the original output mode,
-%%   outside trial/measurement boxes; it returns scratch without hooks.
+%%   outside trial/measurement boxes; it returns fitroom without hooks.
 %% - compute@availht@first/check@wholefirst assess and may start a paragraph,
 %%   measure/cache a whole picture and change dispatch flags.
 %% - skipcolumn charges no-progress attempts; resume@paragraph restarts an
@@ -1463,9 +1466,13 @@
 %%
 %% Ownership shared by the fitting helpers (dte@ prefix omitted):
 %% framebox holds unconsumed rows; rejectable trials split a COPY in
-%% extbox. A fitted prefix installs extbox only on acceptance and emits
-%% the already-rendered tbox. A terminal copy may leave framebox intact;
+%% extbox. acceptsplit installs a chosen copied remainder; fitted output
+%% emits the already-rendered tbox. A terminal copy may leave framebox intact;
 %% termination, not necessarily a void framebox, signals completion.
+%% measurepiece/measure@single produce counted candidates; discardpiece
+%% rejects them. Preliminary whole caches are uncounted and cleared directly.
+%% The output drivers own emission, continuation and defercount resets
+%% after output, including finite fallbacks.
 %% Direct/inner/fallback paths need not measure a picture before output.
 %%
 %% Box consumption clears the binding at the group where it was set.
@@ -1474,10 +1481,21 @@
 %% trials; global/immediate hook effects and TeX split marks are not
 %% undone by discardpiece. Never redraw an accepted measured picture.
 %%
-%% availht is the raw content target (maxdimen can allow whole output).
-%% compute@capacity returns physical room in scratch; measureheight
-%% returns the picture's depth-adjusted height charge in tempdim.
-%% These shared registers are not interchangeable persistent values.
+%% Value ownership (all local to the active output context):
+%% - availht: raw content target; maxdimen can permit whole output.
+%% - fitroom: first assessment's progress basis, or compute@capacity's
+%%   physical room. First fitting then adds page shrink; its minimum-fit
+%%   check may replace/extend this with the existing full-column allowance.
+%%   check@wholefirst saves/restores its caller's basis in firstroom.
+%% - fitht: whole/piece height charged beyond allowed final depth; first
+%%   spacing helpers adjust it. A new measurement replaces it. Retry
+%%   arithmetic uses tempdim, leaving the measured charge intact.
+%% - savedsplitdepth: caller's depth cap across split@to; first, middle
+%%   and closing callers retain their different temporary cap policies.
+%% - minht/firstminht/compression and first-spacing snapshots: dimension
+%%   macros with the producer-specific lifetimes documented below.
+%% Generic scratch is immediate arithmetic/scan work, not page-room or
+%% measured-height storage. No helper may silently borrow these fit values.
 %% Box-only helpers below leave the caller's H/V mode unchanged.
 %% Output/advance helpers state their transitions; assignments are local
 %% unless noted.
@@ -1597,7 +1615,7 @@
 %% these contributions, so no separate terms are added there.
 %% Assess in the original output H/V mode, before any trial wrapper.
 %% May start a paragraph and run whole-picture hooks; preserves framebox.
-%% Returns availht/scratch, local dispatch flags and an optional rendered
+%% Returns availht/fitroom, local dispatch flags and an optional rendered
 %% whole picture in splitresult. This is not a pure page-metric read.
 \def\dte@compute@availht@first{%
   \let\dte@whole@rejected\relax
@@ -1616,37 +1634,37 @@
         % Measure the actual picture, including inherited TikZ settings.
         % The local self-copy preserves the tree for a possible split.
         \dte@box@single\dte@splitresult\dte@framebox
-        \dte@tempdim=\ht\dte@splitresult
+        \dte@fitht=\ht\dte@splitresult
         \dte@scratch=\dp\dte@splitresult
       \else
-        \dte@tempdim=\ht\dte@framebox
+        \dte@fitht=\ht\dte@framebox
         \dte@scratch=\dp\dte@framebox
       \fi
       % TeX allows topskip shrink and final depth up to \maxdepth.
-      \ifdim\dte@tempdim<\topskip \dte@tempdim=\topskip\fi
+      \ifdim\dte@fitht<\topskip \dte@fitht=\topskip\fi
       \advance\dte@scratch by-\maxdepth
-      \ifdim\dte@scratch>0pt \advance\dte@tempdim by\dte@scratch\fi
-      \ifdim\dte@tempdim>\vsize
-        \advance\dte@tempdim by-\glueshrink\topskip
-        \ifdim\dte@tempdim>\vsize
+      \ifdim\dte@scratch>0pt \advance\dte@fitht by\dte@scratch\fi
+      \ifdim\dte@fitht>\vsize
+        \advance\dte@fitht by-\glueshrink\topskip
+        \ifdim\dte@fitht>\vsize
           \dte@availht=\vsize
           % Preserve ordinary deferral, but not across reserved floats.
           \ifx\@toplist\@empty
           \ifx\@botlist\@empty
             \ifdte@showbox
-              \dte@tempdim=\ht\dte@splitresult
+              \dte@fitht=\ht\dte@splitresult
               \dte@scratch=\dp\dte@splitresult
             \else
-              \dte@tempdim=\ht\dte@framebox
+              \dte@fitht=\ht\dte@framebox
               \dte@scratch=\dp\dte@framebox
             \fi
-            \ifdim\dte@tempdim<\topskip \dte@tempdim=\topskip\fi
+            \ifdim\dte@fitht<\topskip \dte@fitht=\topskip\fi
             \advance\dte@scratch by-\@maxdepth
-            \ifdim\dte@scratch>0pt \advance\dte@tempdim by\dte@scratch\fi
-            \ifdim\dte@tempdim>\@colht
-              \advance\dte@tempdim by-\glueshrink\topskip
+            \ifdim\dte@scratch>0pt \advance\dte@fitht by\dte@scratch\fi
+            \ifdim\dte@fitht>\@colht
+              \advance\dte@fitht by-\glueshrink\topskip
             \fi
-            \ifdim\dte@tempdim>\@colht\else
+            \ifdim\dte@fitht>\@colht\else
               \dte@availht=\maxdimen
             \fi
           \fi
@@ -1660,7 +1678,7 @@
     \fi
   \fi
   \advance\dte@availht by-\pagetotal
-  \dte@scratch=\dte@availht
+  \dte@fitroom=\dte@availht
   \advance\dte@availht by-\dimexpr\dte@tbA\relax
   \ifdte@showbox
     \advance\dte@availht by-\dimexpr\dte@padT\relax
@@ -1677,7 +1695,7 @@
       \ifdim\dimexpr\ht\dte@framebox+\dte@tempdim\relax>\dte@availht
         \advance\dte@availht by-\pagedepth
         % Keep the existing full-column progress estimate consistent.
-        \advance\dte@scratch by-\pagedepth
+        \advance\dte@fitroom by-\pagedepth
       \fi
     \fi
   \fi
@@ -1698,7 +1716,7 @@
           \ifdim\dte@availht<2\baselineskip\else \@tempswatrue\fi
         \fi
         % Test whole output before the small-full-column fallback as well.
-        \ifdim\dimexpr\dte@availht+\textheight-\dte@scratch\relax<2\baselineskip
+        \ifdim\dimexpr\dte@availht+\textheight-\dte@fitroom\relax<2\baselineskip
           \@tempswatrue
         \fi
         \if@tempswa
@@ -1707,18 +1725,18 @@
           \dte@suppress@wrapperhook
           \dte@box@single\dte@tbox\dte@framebox
           \dte@restorehbox
-          \dimen@=\dte@scratch
+          \edef\dte@firstroom{\the\dte@fitroom}%
           \dte@compute@capacity
           \dte@measureheight\maxdepth
           \dte@first@spacing
-          \advance\dte@tempdim by-\pageshrink
-          \ifdim\dte@tempdim>\dte@scratch
+          \advance\dte@fitht by-\pageshrink
+          \ifdim\dte@fitht>\dte@fitroom
             \let\dte@whole@rejected\@empty
             % Retain whole-tree deferral only to an unreserved normal column.
             \ifx\@toplist\@empty\ifx\@botlist\@empty
               \dte@measureheight\@maxdepth
               \dte@first@topskip
-              \ifdim\dte@tempdim>\@colht\else
+              \ifdim\dte@fitht>\@colht\else
                 \let\dte@whole@rejected\relax
               \fi
             \fi\fi
@@ -1729,7 +1747,7 @@
             \setbox\dte@splitresult=\box\dte@tbox
             \dte@availht=\maxdimen
           \fi
-          \dte@scratch=\dimen@
+          \dte@fitroom=\dte@firstroom\relax
         \fi
       \fi
     \fi
@@ -1745,18 +1763,18 @@
   \ifx\dte@whole@rejected\@empty \@tempswatrue\fi
 }
 %% Read in the original output mode, outside trial/measurement boxes.
-%% Return physical room in scratch without paragraph setup or picture hooks.
+%% Return physical room in fitroom without paragraph setup or picture hooks.
 %% Inner mode retains the textheight policy. Outer mode uses the current
 %% pagegoal, or pending vsize on an empty page, then charges current usage.
 \def\dte@compute@capacity{%
   % Shared physical room before piece-specific padding and leader space.
-  \dte@scratch=\textheight
+  \dte@fitroom=\textheight
   \ifinner\else
     % LaTeX's pending vsize already accounts for top and bottom floats.
-    \dte@scratch=\pagegoal
-    \ifdim\dte@scratch=\maxdimen \dte@scratch=\vsize\fi
-    \advance\dte@scratch by-\pagetotal
-    \ifdim\pagetotal>0pt \advance\dte@scratch by-\lineskip\fi
+    \dte@fitroom=\pagegoal
+    \ifdim\dte@fitroom=\maxdimen \dte@fitroom=\vsize\fi
+    \advance\dte@fitroom by-\pagetotal
+    \ifdim\pagetotal>0pt \advance\dte@fitroom by-\lineskip\fi
   \fi
 }
 %% Available height for a middle piece (both sides open). Takes
@@ -1770,12 +1788,12 @@
 %% open-bottom frame edge; for `box=false` there is no frame to
 %% collide with and the pad is omitted (otherwise a bare-tree default
 %% `tbA=0pt` would still leave a visible ~1 em gap).
-%% Same mode as compute@capacity: leave physical room in scratch and
+%% Same mode as compute@capacity: leave physical room in fitroom and
 %% return the continuation content quota in availht; no box consumption.
 \def\dte@compute@availht@middle{%
   % Keep the undeducted capacity for fit and full-column progress checks.
   \dte@compute@capacity
-  \dte@availht=\dte@scratch
+  \dte@availht=\dte@fitroom
   \advance\dte@availht by-\dimexpr\dte@tbB\relax
   \advance\dte@availht by-\dimexpr\dte@tbA\relax
   \ifdte@showbox
@@ -1888,8 +1906,9 @@
 }
 %% Natural size and tail depth of the next chunk, without consuming rows.
 %% Box-only: return its total in minht and depth in tempdim, leaving tbox
-%% void. The wrapper invokes everyvbox; nested split/repack hooks are
-%% suppressed. framebox is copied, never consumed.
+%% void. The caller uses that depth immediately to freeze firstminht's
+%% refresh inputs; later minimum probes need only minht. The wrapper invokes
+%% everyvbox; nested split/repack hooks are suppressed. framebox is copied.
 \def\dte@compute@minht{%
   \setbox\dte@tbox=\vbox{%
     \boxmaxdepth=\maxdimen
@@ -1979,8 +1998,8 @@
       \fi
       % Seek enough room for the first row, up to a normal column's
       % capacity. Larger rows retain the diagnosed finite split fallback.
-      \ifdim\dte@minht>\dimexpr\dte@availht+\textheight-\dte@scratch\relax
-        \edef\dte@minht{\the\dimexpr\dte@availht+\textheight-\dte@scratch\relax}%
+      \ifdim\dte@minht>\dimexpr\dte@availht+\textheight-\dte@fitroom\relax
+        \edef\dte@minht{\the\dimexpr\dte@availht+\textheight-\dte@fitroom\relax}%
       \fi
       \ifdim\dte@minht<2\baselineskip\relax
         \def\dte@minht{2\baselineskip}%
@@ -1995,7 +2014,7 @@
       \newpage
       \dte@compute@availht@middle
       \@tempswafalse
-      \ifdim\dte@scratch<\textheight
+      \ifdim\dte@fitroom<\textheight
         \@tempswatrue
       \fi
       \ifdim\dte@minht>2\baselineskip\relax
@@ -2010,7 +2029,7 @@
     \fi
     \ifhmode
       \@whiledim\dte@availht<\dte@minht\relax\do{%
-        \dte@tempdim=\dimexpr\dte@availht+\textheight-\dte@scratch\relax
+        \dte@tempdim=\dimexpr\dte@availht+\textheight-\dte@fitroom\relax
         \ifdim\dte@tempdim<\dte@minht\relax
           \dte@availht=\maxdimen
           \ifdte@showbox\ifx\dte@whole@rejected\@empty
@@ -2082,15 +2101,15 @@
   % charging final depth to the target height. This cap is not a filter
   % for trailing glue/kern/penalty nodes.
   % Outer frames cap depth at the normal row depth, then restore it;
-  % inner frames retain the caller's depth policy. tempdim holds the save.
+  % inner frames retain the caller's depth policy. savedsplitdepth holds the save.
   \ifdte@showbox
-    \dte@tempdim=\splitmaxdepth
+    \dte@savedsplitdepth=\splitmaxdepth
     \ifinner\else \dte@cap@rowdepth\splitmaxdepth\fi
   \else
     \splitmaxdepth=0pt\relax
   \fi
   \dte@split@to#1%
-  \ifdte@showbox \splitmaxdepth=\dte@tempdim\fi
+  \ifdte@showbox \splitmaxdepth=\dte@savedsplitdepth\fi
 }
 %% Box-only outer-first fallback: select a copied natural prefix with
 %% the current framed/bare depth allowance; returns splitresult/extbox.
@@ -2109,7 +2128,7 @@
   \setbox\dte@extbox=\copy\dte@framebox
   \dte@splitfirst\dte@extbox
   \ifdim\dimexpr\ht\dte@extbox+\dp\dte@extbox\relax>0pt
-    \setbox\dte@framebox=\box\dte@extbox
+    \dte@acceptsplit
     \dte@drawpiece{first}%
     \dte@defercount=0\relax
     \newpage
@@ -2143,7 +2162,7 @@
   \let\dte@minht\dte@firstminht
   \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
   % Preserve fits that use the page's existing shrinkable glue.
-  \advance\dte@scratch by\pageshrink
+  \advance\dte@fitroom by\pageshrink
   % Skip the hook on trial wrappers, retaining it on their content boxes.
   \dte@suppress@wrapperhook
   \@tempswatrue
@@ -2186,19 +2205,15 @@
       \ht\dte@splitresult=\dimexpr
         \ht\dte@splitresult+\dp\dte@splitresult-\dp\dte@framebox\relax
       \dp\dte@splitresult=\dp\dte@framebox
-      \dte@box@single\dte@tbox\dte@splitresult
-      % Whole-first trials advance AFTER picture hooks; drawpiece advances
-      % before them. Both increments are balanced by discardpiece on rejection.
-      \global\advance\dte@piecenum by 1\relax
-      \dte@measureheight\maxdepth
+      \dte@measure@single
     \fi
     \dte@first@spacing
-    \ifdim\dte@tempdim>\dte@scratch
+    \ifdim\dte@fitht>\dte@fitroom
       \ifdim\dte@availht>\dte@minht\relax
         \ifx\dte@piecetype\dte@pfirst\else
           % Natural repacking removed unused target space from this whole tree.
           \ifdim\dte@compression<0pt
-            \advance\dte@tempdim by-\dte@compression\relax
+            \advance\dte@fitht by-\dte@compression\relax
           \fi
         \fi
         \dte@retry@smaller
@@ -2208,12 +2223,12 @@
           % Retain fresh-paragraph overhead in the progress check;
           % add back only the column's reserved room.
           \dte@first@spacing
-          \advance\dte@scratch by\dimexpr\textheight-\vsize\relax
+          \advance\dte@fitroom by\dimexpr\textheight-\vsize\relax
         \else
           \dte@first@topskip
-          \dte@scratch=\textheight
+          \dte@fitroom=\textheight
         \fi
-        \ifdim\dte@tempdim>\dte@scratch\else
+        \ifdim\dte@fitht>\dte@fitroom\else
           % The minimum can fit a full column. Reconsider the whole tree
           % there, since it may no longer need a first/middle/last split.
           \dte@discardpiece
@@ -2226,7 +2241,7 @@
     \dte@skipcolumn
     \expandafter\dte@output@breakable
   \else
-    \setbox\dte@framebox=\box\dte@extbox
+    \dte@acceptsplit
     \box\dte@tbox\par
     \dte@defercount=0\relax
     \ifx\dte@piecetype\dte@pfirst
@@ -2237,9 +2252,9 @@
 }
 \def\dte@first@topskip{%
   \ifdim\ht\dte@tbox<\topskip
-    \advance\dte@tempdim by\dimexpr\topskip-\ht\dte@tbox\relax
+    \advance\dte@fitht by\dimexpr\topskip-\ht\dte@tbox\relax
   \fi
-  \advance\dte@tempdim by-\glueshrink\topskip
+  \advance\dte@fitht by-\glueshrink\topskip
 }
 \def\dte@first@spacing{%
   \ifdim\pagetotal=0pt
@@ -2249,39 +2264,48 @@
       % Zero total also permits an existing zero-height predecessor.
       % Insertions alone can freeze pagegoal before the first box, so
       % conservatively cover both possible paragraph-start spacings.
-      \edef\dte@first@height{\the\dte@tempdim}%
+      \edef\dte@first@height{\the\dte@fitht}%
       \dte@first@topskip
-      \edef\dte@first@topheight{\the\dte@tempdim}%
-      \dte@tempdim=\dte@first@height\relax
+      \edef\dte@first@topheight{\the\dte@fitht}%
+      \dte@fitht=\dte@first@height\relax
       \dte@first@interline
-      \ifdim\dte@tempdim<\dte@first@topheight\relax
-        \dte@tempdim=\dte@first@topheight\relax
+      \ifdim\dte@fitht<\dte@first@topheight\relax
+        \dte@fitht=\dte@first@topheight\relax
       \fi
     \fi
   \else
     % Capacity already reserves lineskip only when pagetotal is positive.
-    \advance\dte@tempdim by-\lineskip
+    \advance\dte@fitht by-\lineskip
     \dte@first@interline
   \fi
 }
 \def\dte@first@interline{%
   \ifdim\dte@firstprevdepth>-1000pt\relax
     \ifdim\dimexpr\baselineskip-\dte@firstprevdepth-\ht\dte@tbox\relax<\lineskiplimit
-      \advance\dte@tempdim by\lineskip
-      \advance\dte@tempdim by-\glueshrink\lineskip
+      \advance\dte@fitht by\lineskip
+      \advance\dte@fitht by-\glueshrink\lineskip
     \else
-      \advance\dte@tempdim by\dimexpr\baselineskip-\dte@firstprevdepth-\ht\dte@tbox\relax
-      \advance\dte@tempdim by-\glueshrink\baselineskip
+      \advance\dte@fitht by\dimexpr\baselineskip-\dte@firstprevdepth-\ht\dte@tbox\relax
+      \advance\dte@fitht by-\glueshrink\baselineskip
     \fi
   \fi
 }
 %% Call in the established output paragraph. Consume splitresult into
-%% a rendered tbox; return its height charge in tempdim. drawpiece advances
+%% a rendered tbox; return its height charge in fitht. drawpiece advances
 %% piecenum globally before picture hooks. Reject via discardpiece, or
 %% emit tbox as-is; neither path reruns entry formatting.
 \def\dte@measurepiece#1{%
   \edef\dte@piecetype{#1}%
   \setbox\dte@tbox=\hbox{\dte@drawpiece{#1}}%
+  \dte@measureheight\maxdepth
+}
+%% Counted whole-first trial: splitresult has its final depth restored and
+%% piecetype is single. Measure a copy into tbox, then advance the ordinal
+%% AFTER box/picture hooks and charge its height. Reject with discardpiece
+%% or emit this measured box. Preliminary box@single assessments stay uncounted.
+\def\dte@measure@single{%
+  \dte@box@single\dte@tbox\dte@splitresult
+  \global\advance\dte@piecenum by 1\relax
   \dte@measureheight\maxdepth
 }
 \def\dte@measure@direct#1{%
@@ -2290,11 +2314,20 @@
   \dte@measurepiece{#1}%
   \dte@restorehbox
 }
-%% Box-only read: tempdim = max(ht(tbox), ht(tbox)+dp(tbox)-#1),
+%% Box-only read: fitht = max(ht(tbox), ht(tbox)+dp(tbox)-#1),
 %% where #1 is the allowed page depth. No box consumption or hooks.
 \def\dte@measureheight#1{%
-  \dte@tempdim=\dimexpr\ht\dte@tbox+\dp\dte@tbox-#1\relax
-  \ifdim\dte@tempdim<\ht\dte@tbox \dte@tempdim=\ht\dte@tbox\fi
+  \dte@fitht=\dimexpr\ht\dte@tbox+\dp\dte@tbox-#1\relax
+  \ifdim\dte@fitht<\ht\dte@tbox \dte@fitht=\ht\dte@tbox\fi
+}
+%% Accept selected rows by installing their copied remainder. Box-only:
+%% assign framebox locally from extbox, consuming extbox at its assignment
+%% level. Keep the chosen picture/rows and ordinal unchanged. Also used by
+%% direct inner splits; it requires no measured picture.
+%% Terminal-copy acceptance skips this transfer. Output drivers own emission,
+%% completion and the subsequent defercount reset, not this helper.
+\def\dte@acceptsplit{%
+  \setbox\dte@framebox=\box\dte@extbox
 }
 %% Discard a counted candidate: void tbox locally and undo one global
 %% piecenum increment. Does not restore callback effects or other boxes.
@@ -2302,16 +2335,17 @@
   \global\advance\dte@piecenum by-1\relax
   \setbox\dte@tbox=\box\voidb@x
 }
-%% Box-only retry: lower availht using tempdim (charge), scratch (room)
-%% and compression, clamp to minht, discard the counted picture, and set
-%% @tempswa for another copied trial. framebox remains untouched.
+%% Box-only retry: lower availht using fitht (charge), fitroom and
+%% compression; tempdim holds the reduction. Clamp to minht, discard the
+%% counted picture, and request another trial. framebox remains untouched.
 \def\dte@retry@smaller{%
+  \dte@tempdim=\dte@fitht
   % Also undo observed compression to avoid repeatedly selecting the
   % same rows while reducing the target by a tiny measured excess.
-  \ifdim\dte@tempdim<\dimexpr\dte@scratch+\dte@compression\relax
-    \dte@tempdim=\dimexpr\dte@scratch+\dte@compression\relax
+  \ifdim\dte@tempdim<\dimexpr\dte@fitroom+\dte@compression\relax
+    \dte@tempdim=\dimexpr\dte@fitroom+\dte@compression\relax
   \fi
-  \advance\dte@tempdim by-\dte@scratch
+  \advance\dte@tempdim by-\dte@fitroom
   \advance\dte@availht by-\dte@tempdim
   \ifdim\dte@availht<\dte@minht\relax \dte@availht=\dte@minht\relax\fi
   \dte@discardpiece
@@ -2326,15 +2360,15 @@
   \@tempswatrue
 }
 \def\dte@splitmiddle#1{%
-  % In the original output mode, consume #1 via split@to. Use scratch
-  % (physical room) and framed/column/inner policy to cap depth; restore
-  % splitmaxdepth afterwards, using tempdim for its saved value.
-  \dte@tempdim=\splitmaxdepth
+  % In the original output mode, consume #1 via split@to. Use fitroom
+  % and framed/column/inner policy to cap depth; restore splitmaxdepth
+  % afterwards from savedsplitdepth.
+  \dte@savedsplitdepth=\splitmaxdepth
   \ifdte@showbox
     \ifdte@columns
       \splitmaxdepth=0pt\relax
     \else
-      \ifdim\dte@scratch<\textheight
+      \ifdim\dte@fitroom<\textheight
         \splitmaxdepth=0pt\relax
       \else
         \ifinner\else \dte@cap@rowdepth\splitmaxdepth\fi
@@ -2344,7 +2378,7 @@
     \splitmaxdepth=0pt\relax
   \fi
   \dte@split@to#1%
-  \splitmaxdepth=\dte@tempdim
+  \splitmaxdepth=\dte@savedsplitdepth
 }
 %% Box-only: copy/repack splitresult into tbox at natural spacing;
 %% compression is natural total minus assigned total. Preserve the source
@@ -2402,7 +2436,7 @@
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
     \setbox\dte@tbox=\box\voidb@x
-    \dte@tempdim=\dte@scratch
+    \dte@tempdim=\dte@fitroom
     \ifdim\dte@tempdim<\textheight\else
       \ifinner\else
         % Try ordinary full-column splits before invoking the fitter;
@@ -2418,8 +2452,11 @@
       % a last piece larger than its raw content.
       \setbox\dte@splitresult=\copy\dte@framebox
       \dte@measure@cont{last}%
-      \ifdim\dte@tempdim>\dte@scratch
+      % A fitting terminal copy is accepted without replacing framebox.
+      \ifdim\dte@fitht>\dte@fitroom
         \dte@discardpiece
+        % The local deferral bound is either the charge or a strict prefix.
+        \dte@tempdim=\dte@fitht
         \ifx\dte@fullfit\@empty
           % Prefer a strict prefix. Shrinkable glue may still permit a
           % terminal split, which is measured as a closing picture below.
@@ -2440,7 +2477,7 @@
           \fi
           \ifdim\dte@minht<\dte@tempdim
           \ifdim\dte@availht<\dte@minht\relax
-            \ifdim\dimexpr\dte@availht+\textheight-\dte@scratch\relax<\dte@minht\relax
+            \ifdim\dimexpr\dte@availht+\textheight-\dte@fitroom\relax<\dte@minht\relax
               % Preserve the diagnosed oversized-row fallback.
             \else
               \dte@retrycolumn
@@ -2456,10 +2493,10 @@
               \dte@split@minimum{0pt}{-\maxdimen}%
             \else
               \setbox\dte@extbox=\copy\dte@framebox
-              \dte@tempdim=\splitmaxdepth
+              \dte@savedsplitdepth=\splitmaxdepth
               \splitmaxdepth=0pt\relax
               \dte@split@to\dte@extbox
-              \splitmaxdepth=\dte@tempdim
+              \splitmaxdepth=\dte@savedsplitdepth
             \fi
             \dte@natural@split
             % Keep natural row spacing, but preserve a larger target's
@@ -2471,7 +2508,7 @@
             \setbox\dte@splitresult=\box\dte@tbox
             \dte@classify@split\dte@extbox
             \dte@measure@cont{\dte@piecetype}%
-            \ifdim\dte@tempdim>\dte@scratch
+            \ifdim\dte@fitht>\dte@fitroom
               \ifdim\dte@availht>\dte@minht\relax
                 \dte@retry@smaller
               \else
@@ -2479,7 +2516,7 @@
                   \dte@discardpiece
                   \@tempswatrue
                 \else
-                  \ifdim\dte@tempdim>\textheight
+                  \ifdim\dte@fitht>\textheight
                     % Even the minimum rendered chunk exceeds a normal
                     % column. Emit it once with the usual overflow diagnosis.
                   \else
@@ -2490,12 +2527,14 @@
               \fi
             \fi
             \if@tempswa\else
-              \setbox\dte@framebox=\box\dte@extbox
+              % Accept the selected prefix (or exhausted split), not a retry.
+              \dte@acceptsplit
             \fi
           \fi
           \else
             % No smaller closing piece exists. Keep its diagnostic and
             % emit it once, including when padding alone is too large.
+            % As with a fitting terminal copy, completion leaves framebox intact.
             \setbox\dte@splitresult=\copy\dte@framebox
             \dte@measure@cont{last}%
           \fi
@@ -2503,7 +2542,7 @@
       \fi
     \fi
     \if@tempswa\else\ifinner\else
-      \ifdim\dte@scratch<\textheight\else
+      \ifdim\dte@fitroom<\textheight\else
         \ifx\dte@fullfit\relax
           % Try the unchanged full-column split before consuming its rows.
           \setbox\dte@extbox=\copy\dte@framebox
@@ -2519,13 +2558,13 @@
           \dte@classify@split\dte@extbox
           \let\dte@measure@cont\dte@measure@direct
           \dte@measure@cont{\dte@piecetype}%
-          \ifdim\dte@tempdim>\dte@scratch
+          \ifdim\dte@fitht>\dte@fitroom
             \dte@discardpiece
             % Reuse the measured prefix/closing fitter on this column.
             \let\dte@fullfit\@empty
             \@tempswatrue
           \else
-            \setbox\dte@framebox=\box\dte@extbox
+            \dte@acceptsplit
           \fi
         \fi
       \fi
