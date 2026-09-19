@@ -3,7 +3,7 @@
     "id": "gallery-gallery",
     "family": "gallery",
     "fixture": "../dirtreex_examples.tex",
-    "source_sha256": "c802fa49c5f08e6264e5b98156ef8fb706f20e52e189722e46b8e87a430f2a16",
+    "source_sha256": "d1f35141121737905e79a688aed7423b4307f015f7e452e4ca46434607e554ce",
     "kind": "pass",
     "max_runs": 3,
     "markers": {}
