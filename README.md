@@ -6,7 +6,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 
 - **Auto-tracked depth.** Nest `\dir`, `\file`, and `\archive` as deeply as you want; the package derives the depth from the nesting — no per-entry depth argument.
 - **Sharp or rounded elbows**, configurable per tree or per entry via a single `elbow radius` key (`0pt` = sharp, any positive length = rounded arc).
-- **Per-entry overrides** for line colour, line width, and elbow radius.
+- **Per-entry overrides** for icons, line colour, line width, line style, and elbow radius.
 - **Breakable frame.** The border, background fill, and every pending `│` column continue seamlessly across page boundaries.
 - **CJK-friendly.** Works out of the box with `ctex` + LuaLaTeX.
 - **Zero shell-escape, no external tools, no Python helpers.**
@@ -40,12 +40,12 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 
 | Component | Notes |
 | :--- | :--- |
-| LuaLaTeX *or* pdfLaTeX | LuaLaTeX is required if your tree contains CJK or any non-Latin-1 text. |
+| LuaLaTeX, pdfLaTeX or XeLaTeX | For CJK, use a suitable font setup, such as `ctex` with LuaLaTeX. |
 | e-TeX extensions (`\numexpr`, `\dimexpr`, `\ifcsname`) | Present in every modern TeX engine (pdfTeX, XeTeX, LuaTeX) and guaranteed by the package's format requirement (`LaTeX2e` `2020/10/01` or later). |
 | TikZ 3.x | The `backgrounds` library is loaded automatically. |
-| `xcolor` | Both `color!mix!color` and `HTML` colour models are accepted. |
+| `xcolor` | Use colour names or expressions such as `blue!50!black`. Define HTML colours first, for example `\definecolor{accent}{HTML}{336699}`. |
 | `pgfkeys` | Option parsing. |
-| `zref-abspage` | Cross-page anchoring. |
+| `zref-abspage` | Absolute page tracking; PGF positions distinguish standard two-column output. |
 | Document commands (LaTeX kernel) | `\NewDocumentEnvironment` / `\NewDocumentCommand`, plus the `v` (verbatim) argument type used by `\verbdir` / `\verbfile` / `\verbarchive`. |
 
 No `-shell-escape`, no external tools, no Python helper.
@@ -268,7 +268,7 @@ Pass as a sub-list: `box = { … }`.
 | `corners` | `0pt` | Corner radius. A single value applies to all four corners; a four-value list is TL, TR, BR, BL. |
 | `border color` | `black` | |
 | `border width` | `0.4pt` | |
-| `background color` | `white` | Named colour, `color!mix!color`, or `HTML`. |
+| `background color` | `white` | Colour name or `xcolor` expression; define HTML colours first (see §1). |
 | `margin` | `6pt` | Padding between the border and the tree content. Single value = uniform; a four-value list is T, R, B, L (asymmetric padding is supported in both single and breakable output). |
 
 Example:
@@ -306,7 +306,7 @@ All six entry commands accept `icon={...}` to print inline TeX content before th
 
 Use a glyph command or a text-sized `\includegraphics` for an image icon. Keep its height and depth within the normal text row to preserve baseline and frame alignment; standard `\raisebox` can adjust its vertical position. The item-icon section in `dirtreex_examples.tex` shows images scaled to `0.9em` high and lowered by `0.15em`. Custom `\DirtreexFormatName` hooks control whether and how the icon is rendered (§4.4).
 
-Any `\dir`, `\file`, `\archive` (or their verbatim siblings `\verbdir` / `\verbfile` / `\verbarchive`) can take the same `line color`, `line width`, `line style`, and `elbow radius` keys. They override the environment-level defaults **for that entry's connector only**:
+Any `\dir`, `\file`, `\archive` (or their verbatim siblings `\verbdir` / `\verbfile` / `\verbarchive`) can take the same `line color`, `line width`, `line style`, and `elbow radius` keys. They override the environment-level defaults **for connector segments owned by that entry**:
 
 ```latex
 \dir[line color = blue]{src}{source}{
@@ -325,22 +325,22 @@ Each entry owns its own `└`-shape. The vertical line continuing **down** from 
 
 ## 7. Cross-page behaviour
 
-When the finished tree is taller than the space left on the current page, `dirtreex` cuts it into pieces and emits them on consecutive pages. Each piece is drawn as a self-contained TikZ `\node`, so the border, background, and all active `│` columns continue across the break.
+When a tree needs splitting, `dirtreex` emits pieces on consecutive pages or standard LaTeX columns, accounting for current float reservations and rendered frame dimensions. Each piece contains a TikZ content node, with its frame and active `│` columns drawn around it. Bare trees use the same splitting machinery without a frame.
 
-Two compile passes are required the **first** time the break structure settles (or any time it shifts). The initial pass records absolute page numbers via `zref-abspage`; the second pass reads them so that the connector of each piece-1 entry knows it is not actually anchored to whatever sits above it in the entry list.
+The initial pass records absolute page numbers via `zref-abspage` and, in standard two-column mode, horizontal row origins via PGF. Later passes use these locations to distinguish a predecessor on the same piece from one across a page or column break. Recompile until the auxiliary files settle; the isolated regression cases settle within two passes, and the gallery with its table of contents within three.
 
 Concretely:
 
 - Every piece after the first starts with a `0.5\baselineskip` leader of empty space, so the first visible entry shows a `│` above its elbow matching the inter-sibling spacing used on a single page.
 - Bottom extensions of every active column continue down to the first piece's bottom edge.
 - Top extensions re-appear in the second (and any subsequent) piece, matching the column colours and widths the previous piece ended with.
-- The closing piece always spans the configured content width, even when the final `\vsplit` leaves a void remainder (so the bottom border never collapses to a corner sliver).
+- The closing piece retains the configured content width. If first-piece fitting consumes the entire tree, it produces a complete tree without an empty trailing closing piece.
 
 ---
 
 ## 8. Example gallery
 
-The snippets below are self-contained: drop any of them into a document with `\usepackage{dirtreex}` and they compile. For a much broader set of worked examples — every option, every combination, every edge case — see `dirtreex_examples.tex` in the repository root.
+The snippets below are self-contained: drop any of them into a document with `\usepackage{dirtreex}` and they compile. For more worked examples of the supported options, see `dirtreex_examples.tex` in the repository root.
 
 ### 8.1 Defaults
 
@@ -423,7 +423,7 @@ The snippets below are self-contained: drop any of them into a document with `\u
       \file{r1.txt}{}
       % ... add enough files to overflow
     }
-    \dir[line color = blue]{blue-branch}{}{file{b1.txt}{}}
+    \dir[line color = blue]{blue-branch}{}{\file{b1.txt}{}}
   }
 \end{dirtreex}
 ```
@@ -452,12 +452,12 @@ lualatex -interaction=nonstopmode yourdoc.tex
 lualatex -interaction=nonstopmode yourdoc.tex  # 2nd pass for zref
 ```
 
-- The first pass records the absolute page number of every entry via `zref-abspage`.
-- The second pass reads those labels so the first entry of each piece can distinguish "I follow an entry on the same page" (draw a long connector) from "I start a new piece" (draw a short stub and rely on the top extension to fill the column).
+- The first pass records absolute pages and any required column positions.
+- Subsequent passes read those locations to choose connector anchors and cross-break extensions.
 
-If you have not changed anything that moves a break point, a single pass is enough. For a fresh document, run two.
+For a fresh document, start with two passes and rerun if labels or the table of contents still change. The gallery requires three passes. A document with unchanged, settled auxiliary files generally needs only one.
 
-`latexmk` works: the package emits a `Package dirtreex Warning: Rerun LaTeX...` at `\end{document}` whenever any `zref` lookup was still unresolved, and `latexmk`'s default rerun detector picks that up automatically.
+The package emits `Package dirtreex Warning: Rerun LaTeX...` at `\end{document}` when required page or column data is missing. This is a rerun request, not a complete auxiliary-stability check; also heed LaTeX's changed-label warnings or use `latexmk`.
 
 ---
 
@@ -467,7 +467,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 | :--- | :--- | :--- |
 | First entry on a continuation page has no `│` above its elbow | Only one compile pass has run so far | Run LaTeX again. The `Rerun LaTeX...` warning at `\end{document}` is already asking you to. |
 | Vertical columns stop halfway down the last piece | Same cause — `zref` has not seen the break yet | Run LaTeX again. |
-| CJK characters render as `□` or are missing | Wrong engine | Compile with LuaLaTeX (plus `ctex`). |
+| CJK characters render as `□` or are missing | Missing glyphs or font setup | Use a suitable Unicode engine and fonts, for example LuaLaTeX with `ctex`. |
 | `! Package dirtreex Error: \dir used outside dirtreex environment` (same for `\file`, `\archive`, and their verbatim siblings) | A stray entry command that is not inside `\begin{dirtreex}…\end{dirtreex}` | Wrap the call in a `dirtreex` environment. |
 | `! Package dirtreex Error: parsefour expects 1 or 4 comma-separated values` (or `parsetwo expects 1 or 2 …`) | `corners`, `margin`, `box break at`, or `tree break at` given with the wrong arity | Pass either a single value or the full set (four for `corners`/`margin`, two for the break-at keys). Remember the enclosing braces: `margin = {2pt, 4pt, 6pt, 8pt}`, not `margin = 2pt, 4pt, 6pt, 8pt`. |
 | `Package dirtreex Warning: \dte@findanchor hit the recursion floor at entry N` (once per env) | The tree's first top-level entry has depth > 0, or an outer `\begingroup` shadowed `\dte@depth` and produced an inverted depth sequence | Ensure the env body starts with a depth-0 `\dir` / `\file` / `\archive` (or `\verbdir` / `\verbfile` / `\verbarchive`). The connector for the affected entry is snapped to a cross-page-stub variant as a graceful fallback, so the build still succeeds — the warning is purely diagnostic. |
@@ -476,8 +476,11 @@ If you have not changed anything that moves a break point, a single pass is enou
 
 ## 11. Limitations
 
+- Nested directory/archive entries are supported; nested `dirtreex` environments and entry constructors invoked from rendering hooks are unsupported. Keep entry capture in the environment body.
+- Pagination assumes standard LaTeX page/column and float accounting. Arbitrary replacement output routines or balancing-column packages are not qualified.
+- Entry formatting runs once per entry, but picture hooks can run during rejected fitting trials. Keep their global or immediate side effects in mind; grouping cannot roll them back.
+- A row or frame padding too large for any column can still produce a finite overflow diagnostic. Repeated unconsumed deferral stops at the twentieth attempt; reduce recurring paragraph/header material or clear pending floats.
 - Extremely small `box.margin` combined with a very large `elbow radius` crowds the corner; the internal clamp (`connE ≤ 0.5\baselineskip`) keeps things legible but will not rescue pathological values.
-- The anchor search compares `zref` page numbers as digit strings. Safe today; be aware if a future `zref` change makes that field non-numeric.
 - No built-in numbering or hyperlinks. Use `icon={...}` (§6.4) for per-entry icons and the `\DirtreexFormatName` hook (§4.4) for custom name formatting; wrap the tree in a `minipage` if you need decoration around the whole frame.
 
 ---
@@ -487,7 +490,7 @@ If you have not changed anything that moves a break point, a single pass is enou
 | Path | What it is |
 | :--- | :--- |
 | `dirtreex.sty` | The package — a single self-contained file. |
-| `dirtreex_examples.tex` | Worked examples covering the full feature surface. Compile with `lualatex dirtreex_examples.tex` (twice, for `zref` to settle) to see every option in action. |
+| `dirtreex_examples.tex` | Worked examples covering the full feature surface. Compile with `lualatex dirtreex_examples.tex` three times to settle tree locations and the table of contents. |
 | `assets/` | PNG glyphs (`directory.png`, `python.png`, `zip_file.png`) used by the icon examples in `dirtreex_examples.tex`. |
 | `README.md` | This documentation. |
 | `LICENSE` | The LaTeX Project Public License 1.3c. |

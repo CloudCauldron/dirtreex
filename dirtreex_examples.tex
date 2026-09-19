@@ -22,8 +22,9 @@
 %%   (3) the exact same source code typeset by the package so that
 %%       the reader can see its output immediately below.
 %%
-%% Compile with:  lualatex dirtreex_examples.tex
-%%                lualatex dirtreex_examples.tex (second pass for zref)
+%% Clean build (no .aux/.toc): run lualatex dirtreex_examples.tex three times
+%% to settle the table of contents and tree-location references.
+%% With settled auxiliary files and unchanged layout, one run normally suffices.
 
 \documentclass[11pt]{article}
 \newcommand{\pagemargin}{2cm}
