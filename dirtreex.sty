@@ -1133,8 +1133,10 @@
   \fi
 }
 %% Prior-run lookup, no typesetting: #1 entry -> local macro #2 holding
-%% abspage[:horizontal-origin-in-sp]. Uses rowpos/scratch; missing data
-%% raises the document-global rerun flag (see indexed-data schema).
+%% abspage[:horizontal-origin-in-sp]. Uses rowpos/scratch and PGF point
+%% scratch. Missing data raises the global rerun flag (see indexed-data schema).
+%% The columns flag is captured outside row/trial boxes; the x origin is
+%% recorded at shipout and is never inferred from the current output column.
 \def\dte@getlocation#1#2{%
   \edef#2{\zref@extractdefault{dte\the\dte@tnum.#1}{abspage}{0}}%
   \ifnum#2=0\relax \global\dte@needreruntrue\fi
@@ -1445,6 +1447,20 @@
 %% ============================================================
 %%  Box output
 %% ============================================================
+%% Integration owners and observation boundaries:
+%% - compute@capacity reads physical room in the original output mode,
+%%   outside trial/measurement boxes; it returns scratch without hooks.
+%% - compute@availht@first/check@wholefirst assess and may start a paragraph,
+%%   measure/cache a whole picture and change dispatch flags.
+%% - skipcolumn charges no-progress attempts; resume@paragraph restarts an
+%%   empty paragraph. Successful output resets the count and uses newpage directly.
+%% - getlocation reads prior-run page/column identity, not live output state.
+%% Standard LaTeX column accounting is assumed: vsize already reflects the
+%% float reservations made through @colroom. First/middle quotas and rendered
+%% picture charges remain separate; their metric/depth reads are not movable.
+%% The tex_*:D paragraph primitives in skipcolumn/resume@paragraph deliberately
+%% bypass hooks. These are kernel-coupled dependencies, not public expl3 APIs.
+%%
 %% Ownership shared by the fitting helpers (dte@ prefix omitted):
 %% framebox holds unconsumed rows; rejectable trials split a COPY in
 %% extbox. A fitted prefix installs extbox only on acceptance and emits
@@ -1515,6 +1531,17 @@
     \draw[\dte@bordercolor,line width=\dte@borderwidth]
       \dte@wholeframe@path;
   \end{tikzpicture}\par
+}
+
+%% Suppress the auxiliary wrapper's everyhbox, retaining nested box hooks.
+%% Save the hook tokens without expanding their contents. The installed
+%% shim restores them inside a wrapper's group; the caller invokes restorehbox
+%% outside the wrapper after its single trial or complete trial loop.
+%% Global hook replacements can override the shim for later wrappers.
+%% No box, paragraph, group or callback is created by this setup.
+\def\dte@suppress@wrapperhook{%
+  \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
+  \everyhbox{\dte@restorehbox}%
 }
 
 %% Box-only: return a whole picture in #1 from a COPY of #2.
@@ -1677,8 +1704,7 @@
         \if@tempswa
           \ifhmode\else\par\noindent\fi
           % Match direct output's box hooks while retaining the measured picture.
-          \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
-          \everyhbox{\dte@restorehbox}%
+          \dte@suppress@wrapperhook
           \dte@box@single\dte@tbox\dte@framebox
           \dte@restorehbox
           \dimen@=\dte@scratch
@@ -1718,19 +1744,10 @@
   \fi
   \ifx\dte@whole@rejected\@empty \@tempswatrue\fi
 }
-%% Available height for a middle piece (both sides open). Takes
-%% the remaining column room, subtracts tree-break-at offsets
-%% (tbB top, tbA bottom), the two border widths, one baselineskip safety
-%% pad, and the leader space prepended above the first row.
-%% The frame's torn-edge offsets bbB / bbA are applied
-%% independently inside \dte@drawpiece, not deducted from the row quota.
-%% When `box=true`, an extra \baselineskip of safety pad is reserved
-%% so the last row of the middle piece never collides with the
-%% open-bottom frame edge; for `box=false` there is no frame to
-%% collide with and the pad is omitted (otherwise a bare-tree default
-%% `tbA=0pt` would still leave a visible ~1 em gap).
-%% Read current output mode before measurement boxing. Return physical
-%% room in scratch, without starting a paragraph or invoking picture hooks.
+%% Read in the original output mode, outside trial/measurement boxes.
+%% Return physical room in scratch without paragraph setup or picture hooks.
+%% Inner mode retains the textheight policy. Outer mode uses the current
+%% pagegoal, or pending vsize on an empty page, then charges current usage.
 \def\dte@compute@capacity{%
   % Shared physical room before piece-specific padding and leader space.
   \dte@scratch=\textheight
@@ -1742,6 +1759,17 @@
     \ifdim\pagetotal>0pt \advance\dte@scratch by-\lineskip\fi
   \fi
 }
+%% Available height for a middle piece (both sides open). Takes
+%% the remaining column room, subtracts tree-break-at offsets
+%% (tbB top, tbA bottom), the two border widths, one baselineskip safety
+%% pad, and the leader space prepended above the first row.
+%% The frame's torn-edge offsets bbB / bbA are applied
+%% independently inside \dte@drawpiece, not deducted from the row quota.
+%% When `box=true`, an extra \baselineskip of safety pad is reserved
+%% so the last row of the middle piece never collides with the
+%% open-bottom frame edge; for `box=false` there is no frame to
+%% collide with and the pad is omitted (otherwise a bare-tree default
+%% `tbA=0pt` would still leave a visible ~1 em gap).
 %% Same mode as compute@capacity: leave physical room in scratch and
 %% return the continuation content quota in availht; no box consumption.
 \def\dte@compute@availht@middle{%
@@ -1802,6 +1830,9 @@
   \newpage
   \dte@resumepara
 }
+%% Resume only the empty outer paragraph selected by skipcolumn. Restore
+%% par if our wrapper is still installed; keep a page hook's replacement.
+%% Primitive everypar/noindent restart H mode without replaying setup.
 \def\dte@resume@paragraph{%
   \ifx\par\dte@skip@par \let\par\dte@resumepar\fi
   % Keep newpage hook assignments; suppress only the repeated paragraph start.
@@ -1898,6 +1929,8 @@
   \let\dte@first@minimum\relax
   \let\dte@refresh@firstmin\relax
   % Capture outer mode before picture and trial-measurement boxing.
+  % This sentinel also controls extension bounds; restore those bounds
+  % before end-picture hooks so their extents still participate in fitting.
   \let\dte@endbounds\endpgfinterruptboundingbox
   \ifinner\let\dte@endbounds\relax\fi
   % Materialise the leader space into an allocated dimen once
@@ -2112,8 +2145,7 @@
   % Preserve fits that use the page's existing shrinkable glue.
   \advance\dte@scratch by\pageshrink
   % Skip the hook on trial wrappers, retaining it on their content boxes.
-  \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
-  \everyhbox{\dte@restorehbox}%
+  \dte@suppress@wrapperhook
   \@tempswatrue
   \@whilesw\if@tempswa\fi{%
     \@tempswafalse
@@ -2254,8 +2286,7 @@
 }
 \def\dte@measure@direct#1{%
   % A formerly direct picture must not gain a wrapper's hbox hook.
-  \edef\dte@restorehbox{\everyhbox{\the\everyhbox}}%
-  \everyhbox{\dte@restorehbox}%
+  \dte@suppress@wrapperhook
   \dte@measurepiece{#1}%
   \dte@restorehbox
 }
