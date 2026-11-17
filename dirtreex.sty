@@ -763,28 +763,9 @@
     \fi
   \fi
 }
-%% Cap radius #1 by arm width/half-baseline; only the connector also caps by stem.
-\def\dte@clampelbow#1{%
-  \ifdim#1>\dte@width            #1=\dte@width             \fi
-  \ifdim#1>0.5\baselineskip      #1=0.5\baselineskip       \fi
-  \ifdte@splitflag
-    \ifdim#1>0.2\baselineskip    #1=0.2\baselineskip       \fi
-  \fi
-}
-
-\def\dte@connector@rounded{%
-  \ifdim\dte@connE>\dte@connV \dte@connE=\dte@connV \fi
-  \dte@clampelbow\dte@connE
-  \raise\dte@connR\hbox{%
-    \tikz[x=1pt,y=1pt,baseline=0pt]{%
-      \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
-      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,/tikz/dte@line style=\dte@cur@ls]
-        (0,\strip@pt\dte@connV) -- (0,\strip@pt\dte@connE)
-        arc[start angle=180,end angle=270,radius=\strip@pt\dte@connE]
-        -- (\strip@pt\dte@width,0);%
-    }%
-  }%
-}
+%% The rounded branch-only connector is defined with the other branch painters
+%% above. Do not reintroduce the former vertical stem here: the page-piece
+%% trunk painter owns that geometry.
 
 %% Legacy row-fragment pass-through painter retained for comparison; the
 %% continuous-trunk renderer no longer calls it.
