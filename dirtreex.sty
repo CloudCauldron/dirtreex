@@ -76,7 +76,13 @@
 \newdimen\dte@ptE         % pass-through radius; no connector-stem cap
 \newdimen\dte@ptRaise     % pass-through upper-half raise
 \newdimen\dte@ptH         % pass-through vrule height scratch
-\newdimen\dte@ptPhase     % dash phase measured from the first row
+\newdimen\dte@ptPhase     % legacy row-fragment dash phase
+\newdimen\dte@trunkX      % logical trunk x coordinate
+\newdimen\dte@trunkParentY % parent baseline in the current piece
+\newdimen\dte@trunkPrevY  % previous branch point in the current piece
+\newdimen\dte@trunkChildY % current branch point in the current piece
+\newdimen\dte@trunkRadius % effective rounded branch radius
+\newdimen\dte@trunkLeader % continuation leader above the first row
 \newdimen\dte@scratch     % general-purpose allocated scratch dimen
 \newcount\dte@scratchcnt  % general-purpose allocated scratch count
 \newdimen\dte@leader@dim  % leader space prepended to every non-first piece
@@ -244,6 +250,7 @@
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i er\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@e\the\dte@i i\endcsname\relax
       \expandafter\global\expandafter\let\csname dte@pos@\the\dte@i\endcsname\relax
+      \expandafter\global\expandafter\let\csname dte@children@\the\dte@i\endcsname\relax
       \advance\dte@i by 1\relax
     \repeat
   \fi
@@ -462,6 +469,32 @@
     \def\dte@last{0}%
   \fi}
 
+%% Build direct-child lists for the continuous-trunk renderer.
+%% The latest entry at depth d-1 is the direct parent of a depth-d entry.
+%% The per-depth stack is local; the child lists live for this tree render.
+\def\dte@preprocess@trunks{%
+  \begingroup
+    \dte@i=1\relax
+    \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+      \dte@j=\dte@eget{\the\dte@i}{d}\relax
+      \ifnum\dte@j>0\relax
+        \dte@k=\numexpr\dte@j-1\relax
+        \edef\dte@trunk@parent{\dte@safeget{dte@trunk@latest@\the\dte@k}}%
+        \ifx\dte@trunk@parent\@empty\else
+          \edef\dte@trunk@existing{\dte@safeget{dte@children@\dte@trunk@parent}}%
+          \ifx\dte@trunk@existing\@empty
+            \expandafter\xdef\csname dte@children@\dte@trunk@parent\endcsname{\the\dte@i}%
+          \else
+            \expandafter\xdef\csname dte@children@\dte@trunk@parent\endcsname{\dte@trunk@existing,\the\dte@i}%
+          \fi
+        \fi
+      \fi
+      \expandafter\edef\csname dte@trunk@latest@\the\dte@j\endcsname{\the\dte@i}%
+      \advance\dte@i by 1\relax
+    \repeat
+  \endgroup
+}
+
 %% ============================================================
 %%  Formatting and styles
 %% ============================================================
@@ -585,11 +618,15 @@
   \fi\fi
 }
 
+\def\dte@clampbranchradius#1{%
+  \ifdim#1>\dte@width       #1=\dte@width             \fi
+  \ifdim#1>0.5\baselineskip #1=0.5\baselineskip       \fi
+}
+
 \def\dte@draw@connector#1{%
-  % #1 is the entry index; scratch supplies the stem height.
-  \dte@connV=\dte@scratch\relax
   \dte@connR=0.2\baselineskip\relax
   \dte@resolve@elbow{#1}\dte@cur@er\dte@connE
+  \dte@clampbranchradius\dte@connE
   \ifdim\dte@connE>0pt\relax
     \dte@connector@rounded
   \else
@@ -597,43 +634,135 @@
   \fi
 }
 
-%% The solid elbow joins the arm at the stem's right edge.
-%% TikZ coordinates in both connector variants use 1pt axes for \strip@pt.
+%% Sharp branch: horizontal arm only; the parent trunk runs underneath it.
 \def\dte@connector@sharp{%
   \ifx\dte@cur@ls\dte@ls@solid
     {\color{\dte@cur@lc}%
      \dte@rulewidth=\dte@cur@lw\relax
-     \raise\dte@connR\hbox to 0pt{%
-       \kern-0.5\dte@rulewidth
-       \vrule width\dte@rulewidth
-              height\dte@connV
-              depth 0.5\dte@rulewidth\relax
-       \hss
-     }%
      \raise\dte@connR\hbox{%
-       \kern 0.5\dte@rulewidth
-       \vrule width\dimexpr\dte@width-0.5\dte@rulewidth\relax
-              height 0.5\dte@rulewidth
-              depth  0.5\dte@rulewidth
+       \kern-0.5\dte@rulewidth
+       \vrule width\dimexpr\dte@width+0.5\dte@rulewidth\relax
+              height0.5\dte@rulewidth depth0.5\dte@rulewidth\relax
      }%
     }%
   \else
     \raise\dte@connR\hbox{%
       \tikz[x=1pt,y=1pt,baseline=0pt]{%
         \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
-        % Keep the stem and arm in one path. Besides preserving dash phase,
-        % this avoids drawing the elbow point twice (important for dotted
-        % strokes and endpoint arrows). The package's elbow radius controls
-        % rounded geometry; this branch is specifically the sharp variant.
         \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,
               /tikz/dte@line style=\dte@cur@ls,sharp corners]
-          (0,\strip@pt\dte@connV) -- (0,0)
-          -- (\strip@pt\dte@width,0);%
+          (0,0) -- (\strip@pt\dte@width,0);%
       }%
     }%
   \fi
 }
 
+%% Rounded branch: begin at the trunk tangent and retain the quarter-circle.
+\def\dte@connector@rounded{%
+  \raise\dte@connR\hbox{%
+    \tikz[x=1pt,y=1pt,baseline=0pt]{%
+      \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
+      \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,
+            /tikz/dte@line style=\dte@cur@ls]
+        (0,\strip@pt\dte@connE)
+        arc[start angle=180,end angle=270,radius=\strip@pt\dte@connE]
+        -- (\strip@pt\dte@width,0);%
+    }%
+  }%
+}
+
+%% Return the rounded branch's tangent point in current-piece coordinates.
+\def\dte@trunk@branchy#1#2{%
+  \dte@resolve@elbow{#1}\dte@trunk@er\dte@trunkRadius
+  \dte@clampbranchradius\dte@trunkRadius
+  #2=\dimexpr
+    -\dte@trunkLeader-0.5\baselineskip
+    -\csname dte@pos@#1\endcsname
+    +\csname dte@pos@\dte@trunk@start\endcsname
+    +\dte@trunkRadius
+  \relax
+}
+
+%% One incoming style interval. Draw the full parent-to-child path, but clip
+%% it to the interval after the previous sibling's branch point. Repeating
+%% the same path origin preserves TikZ dash phase across siblings and pages;
+%% entry styles still change at each branch's tangent point.
+\def\dte@draw@trunkchild#1{%
+  \edef\dte@trunk@child{#1}%
+  \ifnum\dte@trunk@prev=\dte@trunk@parent\relax
+    \dte@trunkPrevY=\dte@trunkParentY
+  \else
+    \dte@trunk@branchy{\dte@trunk@prev}\dte@trunkPrevY
+  \fi
+  \dte@trunk@branchy{\dte@trunk@child}\dte@trunkChildY
+  \ifdim\dte@trunkPrevY>\dte@trunkChildY
+    \dte@resolve@lc{\dte@trunk@child}\dte@trunk@lc
+    \dte@resolve@lw{\dte@trunk@child}\dte@trunk@lw
+    \dte@resolve@ls{\dte@trunk@child}\dte@trunk@ls
+    \edef\dte@trunk@prev@ys{\the\dte@trunkPrevY}%
+    \edef\dte@trunk@child@ys{\the\dte@trunkChildY}%
+    \edef\dte@trunk@parent@ys{\the\dte@trunkParentY}%
+    \dte@trunkX=\dimexpr
+      \dte@eget{\dte@trunk@parent}{d}\dte@all+\dte@offset
+    \relax
+    \begin{scope}
+      \clip ([yshift=\dte@trunk@child@ys]dte@content.north west)
+        rectangle ([yshift=\dte@trunk@prev@ys]dte@content.north east);
+      \draw[\dte@trunk@lc,line width=\dte@trunk@lw,line cap=butt,
+            /tikz/dte@line style=\dte@trunk@ls]
+        ([xshift=\dte@trunkX,yshift=\dte@trunk@parent@ys]dte@content.north west)
+        --
+        ([xshift=\dte@trunkX,yshift=\dte@trunk@child@ys]dte@content.north west);
+    \end{scope}
+  \fi
+  \def\dte@trunk@prev{#1}%
+}
+
+%% Paint every logical parent trunk, clipped to this page-piece content box.
+%% The path origin remains the parent baseline even when that point is on a
+%% a previous page, so the dash pattern is identical on every continuation.
+\def\dte@draw@trunks#1{%
+  \edef\dte@trunk@start{#1}%
+  \begingroup
+    \pgfinterruptboundingbox
+    \begin{scope}[on background layer]
+      \clip (dte@content.north west) rectangle (dte@content.south east);
+      \dte@i=1\relax
+      \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+        \edef\dte@trunk@parent{\the\dte@i}%
+        \edef\dte@trunk@children{\dte@safeget{dte@children@\the\dte@i}}%
+        \ifx\dte@trunk@children\@empty\else
+          \dte@trunkParentY=\dimexpr
+            -\dte@trunkLeader-0.7\baselineskip
+            -\csname dte@pos@\dte@trunk@parent\endcsname
+            +\csname dte@pos@\dte@trunk@start\endcsname
+          \relax
+          \def\dte@trunk@prev{\dte@trunk@parent}%
+          \dte@foreach@owner\dte@trunk@children\dte@draw@trunkchild
+        \fi
+        \advance\dte@i by 1\relax
+      \repeat
+    \end{scope}
+    \endpgfinterruptboundingbox
+  \endgroup
+}
+
+%% First page piece starts at entry 1; continuations start after the previous
+%% committed break index. If previous-run locations are unavailable, defer
+%% continuation trunks until the normal rerun has populated breakidx.
+\def\dte@draw@trunks@piece{%
+  \ifnum\dte@piecenum=1\relax
+    \dte@trunkLeader=0pt\relax
+    \dte@draw@trunks{1}%
+  \else
+    \edef\dte@trunk@prevbreak{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
+    \ifx\dte@trunk@prevbreak\@empty\else
+      \dte@trunkLeader=\dte@leader@dim\relax
+      \edef\dte@trunk@start{\the\numexpr\dte@trunk@prevbreak+1\relax}%
+      \expandafter\dte@draw@trunks\expandafter{\dte@trunk@start}%
+    \fi
+  \fi
+}
 %% Cap radius #1 by arm width/half-baseline; only the connector also caps by stem.
 \def\dte@clampelbow#1{%
   \ifdim#1>\dte@width            #1=\dte@width             \fi
@@ -657,9 +786,8 @@
   }%
 }
 
-%% Pass-through styling: own-depth upper segment uses the current entry;
-%% lower/pure segments use the stored future owner. Split at arc-top
-%% (0.2 baselineskip + effective radius) to meet the rounded elbow.
+%% Legacy row-fragment pass-through painter retained for comparison; the
+%% continuous-trunk renderer no longer calls it.
 \def\dte@draw@passthrough#1{%
   \edef\dte@save@tempdim{\the\dte@tempdim}%
   \edef\dte@actlist{\dte@safeget{dte@e#1a}}%
@@ -890,11 +1018,7 @@
       \fi
     \fi
   \fi
-  % Keep text-box hook placement; return to the row origin for pass-throughs.
-  \dte@scratch=\dimexpr\numexpr\dte@j-1\relax\dte@all+\dte@offset\relax
-  \kern-\dte@scratch
-  \dte@draw@passthrough{#1}%
-  \kern\dte@scratch
+  % Vertical trunks are painted once per page piece; no row fragments here.
   % Trim the anchor distance to leave clearance below its first-line baseline.
   \dte@scratch=\csname dte@pos@#1\endcsname\relax
   \advance\dte@scratch by-\csname dte@pos@\dte@anchoridx\endcsname\relax
@@ -986,7 +1110,7 @@
     \ifdte@showbox
       \dte@output@singleframe
     \else
-      \par\noindent\box\dte@framebox\par
+      \dte@output@singlebare
     \fi
   \fi
 }
@@ -1018,8 +1142,22 @@
     \fill[\dte@bgcolor]
       \dte@wholeframe@path;
     \end{scope}
+    \dte@trunkLeader=0pt\relax
+    \dte@draw@trunks{1}%
     \draw[\dte@bordercolor,line width=\dte@borderwidth]
       \dte@wholeframe@path;
+  \end{tikzpicture}\par
+}
+
+%% Whole bare tree: use the same clipped trunk overlay without a frame.
+\def\dte@output@singlebare{%
+  \ifhmode\else\par\noindent\fi
+  \begin{tikzpicture}
+    \node[inner sep=0pt,outer sep=0pt,
+          anchor=north west,
+         ] (dte@content) {\box\dte@framebox};
+    \dte@trunkLeader=0pt\relax
+    \dte@draw@trunks{1}%
   \end{tikzpicture}\par
 }
 
@@ -1040,7 +1178,7 @@
     \ifdte@showbox
       \dte@output@singleframe
     \else
-      \box\dte@framebox
+      \dte@output@singlebare
     \fi
   }%
 }
@@ -1450,7 +1588,7 @@
         \box\dte@splitresult\par
       \fi
     \else
-      \ifhmode\else\par\noindent\fi\box\dte@framebox\par
+      \dte@output@singlebare
     \fi
     \dte@defercount=0\relax
   \fi
@@ -1520,8 +1658,7 @@
     \ifdte@showbox
       \dte@output@singleframe
     \else
-      \ifhmode\else\par\noindent\fi
-      \box\dte@framebox\par
+      \dte@output@singlebare
     \fi
     \dte@defercount=0\relax
   \fi
@@ -2062,41 +2199,9 @@
     \ifx\dte@endbounds\relax\else
       \pgfinterruptboundingbox
     \fi
-    % Continue prior boundary columns through the leader into the first row.
-    \ifx\dte@piecetype\dte@pfirst\else
-      \expandafter\ifx
-        \csname dte@breaklines@\the\numexpr\dte@piecenum-1\relax\endcsname
-        \relax
-      \else
-        \edef\dte@prevbk{\dte@safeget{dte@breaklines@\the\numexpr\dte@piecenum-1\relax}}%
-        \dte@foreach@owner\dte@prevbk\dte@draw@topcolumn
-      \fi
-    \fi
-    % Start bottom extensions at the last row's baseline + normal depth.
-    % Use north-relative natural positions: vsplit's assigned height may include
-    % unused space. Add a baseline and, on continuations, the leader.
-    \ifx\dte@piecetype\dte@plast\else
-      \expandafter\ifx
-        \csname dte@breaklines@\the\dte@piecenum\endcsname
-        \relax
-      \else
-        \dte@scratchcnt=\csname dte@breakidx@\the\dte@piecenum\endcsname\relax
-        \dte@tempdim=\csname dte@pos@\the\dte@scratchcnt\endcsname\relax
-        \dte@scratchcnt=1\relax
-        \ifnum\dte@piecenum>1
-          \edef\dte@tmp@idx{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
-          \dte@scratchcnt=\numexpr\dte@tmp@idx+1\relax
-        \fi
-        \advance\dte@tempdim by-\csname dte@pos@\the\dte@scratchcnt\endcsname\relax
-        \advance\dte@tempdim by\dte@bls
-        \ifnum\dte@piecenum>1
-          \advance\dte@tempdim by\dte@leader@dim\relax
-        \fi
-        \edef\dte@extTopY{-\the\dte@tempdim}%
-        \edef\dte@curbk{\dte@safeget{dte@breaklines@\the\dte@piecenum}}%
-        \dte@foreach@owner\dte@curbk\dte@draw@bottomcolumn
-      \fi
-    \fi
+    % Replay each logical trunk from its parent baseline and clip it to the
+    % current piece. This naturally replaces both top and bottom extensions.
+    \dte@draw@trunks@piece
     \dte@endbounds
     \endgroup
   \end{tikzpicture}\par
@@ -2210,6 +2315,7 @@
     \dte@columnsfalse
     \if@twocolumn\ifinner\else\dte@columnstrue\fi\fi
     \dte@preprocess
+    \dte@preprocess@trunks
     \dte@compute@breakdata
     \global\dte@piecenum=0\relax
     \dte@fontsize\relax
