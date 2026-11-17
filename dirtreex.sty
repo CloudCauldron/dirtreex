@@ -773,9 +773,10 @@
   \fi
 }
 \def\dte@collect@piecechildren@loop#1,{%
+  \let\dte@collect@piecechildren@next\relax
   \ifnum#1>0\relax
     \ifnum#1<\dte@trunk@start\relax
-      \expandafter\dte@collect@piecechildren@loop
+      \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
     \else
       \ifx\dte@trunk@visiblechildren\@empty
         \edef\dte@trunk@visiblechildren{#1}%
@@ -787,9 +788,9 @@
       \else
         \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
       \fi
-      \expandafter\dte@collect@piecechildren@next
     \fi
   \fi
+  \dte@collect@piecechildren@next
 }
  
 %% Paint logical parent trunks clipped to the current page-piece content box.
