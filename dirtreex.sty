@@ -649,7 +649,7 @@
     \raise\dte@connR\hbox{%
       \tikz[x=1pt,y=1pt,baseline=0pt]{%
         \useasboundingbox (0,0) rectangle (\strip@pt\dte@width,0.01);%
-        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=butt,
+        \draw[\dte@cur@lc,line width=\dte@cur@lw,line cap=round,
               /tikz/dte@line style=\dte@cur@ls,sharp corners]
           (0,0) -- (\strip@pt\dte@width,0);%
       }%
