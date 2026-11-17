@@ -765,24 +765,33 @@
 %% Collect only direct children whose connector intervals can intersect the
 %% current piece. Children are ordered by source row: retain the first child
 %% at/after the piece start, all children through the piece end, and one child
-%% beyond it. These boundary children preserve trunks crossing either edge.
-%% Starting at the original parent baseline preserves dash phase and the
-%% correct style at the top boundary without replaying off-piece TikZ paths.
-\def\dte@collect@piecechild#1{%
-  \ifnum\dte@trunk@filterdone=0\relax
-    \ifnum#1<\dte@trunk@start\relax\else
+%% beyond it. Stop immediately after that final boundary child; this avoids
+%% recursively replaying the remainder of a large sibling list on every trial.
+\def\dte@collect@piecechildren#1{%
+  \ifx#1\@empty\else
+    \expandafter\dte@collect@piecechildren@loop#1,0,%
+  \fi
+}
+\def\dte@collect@piecechildren@loop#1,{%
+  \ifnum#1>0\relax
+    \ifnum#1<\dte@trunk@start\relax
+      \expandafter\dte@collect@piecechildren@loop
+    \else
       \ifx\dte@trunk@visiblechildren\@empty
         \edef\dte@trunk@visiblechildren{#1}%
       \else
         \edef\dte@trunk@visiblechildren{\dte@trunk@visiblechildren,#1}%
       \fi
       \ifnum#1>\dte@trunk@pieceend\relax
-        \def\dte@trunk@filterdone{1}%
+        \let\dte@collect@piecechildren@next\relax
+      \else
+        \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
       \fi
+      \expandafter\dte@collect@piecechildren@next
     \fi
   \fi
 }
-
+ 
 %% Paint logical parent trunks clipped to the current page-piece content box.
 %% Only branch intervals intersecting this piece are converted into TikZ paths.
 \def\dte@draw@trunks#1#2{%
@@ -798,8 +807,7 @@
         \edef\dte@trunk@children{\dte@safeget{dte@children@\the\dte@i}}%
         \ifx\dte@trunk@children\@empty\else
           \def\dte@trunk@visiblechildren{}%
-          \def\dte@trunk@filterdone{0}%
-          \dte@foreach@owner\dte@trunk@children\dte@collect@piecechild
+          \dte@collect@piecechildren\dte@trunk@children
           \ifx\dte@trunk@visiblechildren\@empty\else
             \dte@trunkParentY=\dimexpr
               -\dte@trunkLeader-0.7\baselineskip
