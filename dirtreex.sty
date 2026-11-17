@@ -519,9 +519,23 @@
     \hbox{\DirtreexFormatIcon{#1}}\nobreak\hspace{0.5em}%
   \fi
 }
+\def\dte@format@rooticon#1{%
+  \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
+  \ifdim\wd\dte@iconbox>0pt
+    %% Root rows use a dedicated renderer, without a branch placement hook.
+    %% Centre the icon on the trunk gutter and let its box advance the name.
+    \kern\dte@offset
+    \kern-0.5\wd\dte@iconbox
+    \dte@iconraise=0.2\baselineskip
+    \advance\dte@iconraise by-0.5\ht\dte@iconbox
+    \advance\dte@iconraise by 0.5\dp\dte@iconbox
+    \smash{\raise\dte@iconraise\copy\dte@iconbox}%
+    \kern\dte@sep
+  \fi
+}
 \newcommand{\DirtreexFormatName}[1]{%
   \ifx\dte@iconposition\dte@iconposition@connector
-    %% Connector mode emits every icon in the row placement hook.
+    \ifnum#1=1 \dte@format@rooticon{#1}\fi
   \else
     \dte@format@inlineicon{#1}%
   \fi
@@ -539,10 +553,6 @@
   \ifx\dte@iconposition\dte@iconposition@connector
     \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
     \ifdim\wd\dte@iconbox>0pt
-      %% The root has no incoming branch: its anchor is one branch-width
-      %% to the left, at the vertical trunk origin. Other icons use the
-      %% horizontal branch endpoint.
-      \ifnum#1=1 \kern-\dte@width\relax\fi
       %% Compute the raise locally; connector painters use their own scratch.
       \dte@iconraise=0.2\baselineskip\relax
       \advance\dte@iconraise by-0.5\ht\dte@iconbox
