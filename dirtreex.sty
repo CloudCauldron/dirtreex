@@ -540,7 +540,9 @@
   \ifx\dte@iconposition\dte@iconposition@connector
     \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
     \ifdim\wd\dte@iconbox>0pt
-      \dte@iconraise=\dte@connR\relax
+      %% The branch painter is smashed in a local box, so compute its
+      %% fixed 0.2-baseline raise here rather than reading its scratch register.
+      \dte@iconraise=0.2\baselineskip\relax
       \advance\dte@iconraise by-0.5\ht\dte@iconbox
       \advance\dte@iconraise by 0.5\dp\dte@iconbox
       \smash{\hbox to 0pt{%
