@@ -521,8 +521,7 @@
 }
 \newcommand{\DirtreexFormatName}[1]{%
   \ifx\dte@iconposition\dte@iconposition@connector
-    %% The first row has no incoming connector, so retain its inline icon.
-    \ifnum#1=1 \dte@format@inlineicon{#1}\fi
+    %% All icons are emitted by the connector-relative placement hook.
   \else
     \dte@format@inlineicon{#1}%
   \fi
@@ -540,6 +539,10 @@
   \ifx\dte@iconposition\dte@iconposition@connector
     \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
     \ifdim\wd\dte@iconbox>0pt
+      %% The first entry is the root: move the anchor from the branch endpoint
+      %% back to the vertical trunk origin. This also moves the following name
+      %% origin, keeping the same icon-to-name spacing as every other entry.
+      \ifnum#1=1 \kern-\dte@width\relax\fi
       %% The branch painter is smashed in a local box, so compute its
       %% fixed 0.2-baseline raise here rather than reading its scratch register.
       \dte@iconraise=0.2\baselineskip\relax
