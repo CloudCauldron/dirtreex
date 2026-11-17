@@ -137,7 +137,7 @@ Override it with `\renewcommand` to inject prefixes or styling. The hook receive
 - `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files, `2` for archives.
 - `\DirtreexGetField{#1}{i}` — the raw icon code, empty when omitted; the name field stays unchanged.
 
-A replacement `\\DirtreexFormatName` hook controls the entire name. In `inline` mode, save and call the original formatter to retain its icon handling, gap, and directory slash when adding decoration. In `connector` mode, stored icons are rendered separately through `\\DirtreexFormatIcon`; avoid manually adding the same stored icon in the name hook unless you deliberately want both.
+A replacement `\DirtreexFormatName` hook controls the entire name. In `inline` mode, save and call the original formatter to retain its icon handling, gap, and directory slash when adding decoration. In `connector` mode, stored icons are rendered separately through `\DirtreexFormatIcon`; avoid manually adding the same stored icon in the name hook unless you deliberately want both.
 
 **Example — tag every directory with a `[DIR]` prefix while keeping the default formatter:**
 
@@ -264,7 +264,7 @@ Custom leader commands are evaluated in the tree's font at rendering time. Use `
 For example, a white circular backing and coloured glyph can be supplied without changing `dirtreex`'s layout code:
 
 ```latex
-\\renewcommand{\\DirtreexFormatIcon}[1]{%
+\\renewcommand{\DirtreexFormatIcon}[1]{%
   \\tikz[baseline=0pt] \\node[
     circle, fill=white, draw=none, inner sep=2pt
   ] {\\textcolor{blue}{\\DirtreexGetField{#1}{i}}};%
