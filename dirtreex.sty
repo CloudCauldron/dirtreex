@@ -769,7 +769,7 @@
 %% recursively replaying the remainder of a large sibling list on every trial.
 \def\dte@collect@piecechildren#1{%
   \ifx#1\@empty\else
-    \expandafter\dte@collect@piecechildren@loop#1,0,%
+    \expandafter\dte@collect@piecechildren@loop#1,0,\dte@collect@piecechildren@stop
   \fi
 }
 \def\dte@collect@piecechildren@loop#1,{%
@@ -784,14 +784,18 @@
         \edef\dte@trunk@visiblechildren{\dte@trunk@visiblechildren,#1}%
       \fi
       \ifnum#1>\dte@trunk@pieceend\relax
-        \let\dte@collect@piecechildren@next\relax
+        \let\dte@collect@piecechildren@next\dte@collect@piecechildren@gobble
       \else
         \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
       \fi
     \fi
+  \else
+    \let\dte@collect@piecechildren@next\\dte@collect@piecechildren@stopconsume
   \fi
   \dte@collect@piecechildren@next
 }
+\def\dte@collect@piecechildren@gobble#1\\dte@collect@piecechildren@stop{}
+\def\dte@collect@piecechildren@stopconsume#1{}
  
 %% Paint logical parent trunks clipped to the current page-piece content box.
 %% Only branch intervals intersecting this piece are converted into TikZ paths.
