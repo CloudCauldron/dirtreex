@@ -531,7 +531,7 @@
 \tikzset{dte@line~style/.code={\__dte_line_style_apply:n {#1}}}
 \ExplSyntaxOff
 
-%% \dte@drawvert{raise}{height}{depth}{colour}{width}{style macro}.
+%% \dte@drawvert{raise}{height}{depth}{colour}{width}{style macro}{dash phase}.
 %% Literal solid uses rules; other styles use the shared TikZ adapter.
 %% Pin height/depth to dimension literals before coordinate parsing.
 \def\dte@drawvert#1#2#3#4#5#6#7{%
