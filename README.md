@@ -130,7 +130,7 @@ Simply place several `dirtreex` environments back-to-back. Each environment has 
 
 ### 4.4 Customising entry-name typesetting (`\DirtreexFormatName`)
 
-`\DirtreexFormatName` is a public hook that controls how each entry name is typeset. The default formatter prints the optional icon with a nonbreaking `0.5em` gap in `icon position=inline` mode, then the stored name plus a trailing `/` for directories. In `connector` mode, the first (root) entry keeps its inline icon; subsequent stored icons are positioned at their connector endpoints. An omitted or empty `icon={}` adds no prefix or gap.
+`\DirtreexFormatName` is a public hook that controls how each entry name is typeset. The default formatter prints the optional icon with a nonbreaking `0.5em` gap in `icon position=inline` mode, then the stored name plus a trailing `/` for directories. In `connector` mode, every stored icon is positioned relative to the connector geometry: the root icon is centred on the vertical trunk origin, and each subsequent icon is centred on its horizontal branch endpoint. An omitted or empty `icon={}` adds no prefix or gap.
 
 Override it with `\renewcommand` to inject prefixes or styling. The hook receives the 1-based entry index as `#1`, and `\DirtreexGetField{idx}{slot}` reads any stored field for that index. `\DirtreexFormatIcon{#1}` is a separate public hook for rendering the stored icon; its default implementation emits the captured icon code unchanged. Override that hook to add backgrounds, colours or other decoration:
 
@@ -234,7 +234,7 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | Key | Default | Meaning |
 | :--- | :--- | :--- |
 | `fontsize` | `\small` | Size command applied to the tree body. Use any length-free size macro: `\tiny`, `\small`, `\normalsize`, …, `\Large`. |
-| `icon position` | `inline` | `inline` prints each icon before its name (the historical behavior); `connector` centres stored non-root icons on their horizontal branch endpoints. The first root entry remains inline. |
+| `icon position` | `inline` | `inline` prints each icon before its name (the historical behavior); `connector` centres the root icon on the vertical trunk origin and each subsequent icon on its horizontal branch endpoint. |
 | `dotfill color` | inherited | Colour of the leader between an entry name and its comment. Accepts an `xcolor` expression; inherits the current text colour when omitted. |
 | `dotfill command` | `\dotfill` | TeX code that fills the gap before a comment. Use `\hrulefill` for a solid rule, `\hfill` for a blank gap, or a custom leader with `\hfill` stretch. |
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
@@ -260,7 +260,7 @@ The dotfill options apply to all nonempty comments in that environment. The lead
 
 Custom leader commands are evaluated in the tree's font at rendering time. Use `\hfill` stretch to preserve comment alignment, and keep the leader within the normal text height. See the comment-leader section of `dirtreex_examples.tex` for a custom dashed pattern.
 
-`icon position=connector` places each stored non-root icon with its centre at the end of the horizontal branch. The icon's height and depth are smashed out of row layout, so custom artwork does not alter the tree's baseline rhythm. The entry name begins after the icon's right edge plus the normal connector-to-name separation. The first root entry remains inline because it has no incoming branch.
+`icon position=connector` places the root icon with its centre at the origin of the vertical trunk, and each subsequent icon with its centre at the end of its horizontal branch. The icon's height and depth are smashed out of row layout, so custom artwork does not alter the tree's baseline rhythm. The entry name begins after the icon's right edge plus the normal connector-to-name separation.
 
 For example, a white circular backing and coloured glyph can be supplied without changing `dirtreex`'s layout code:
 
