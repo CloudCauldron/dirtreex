@@ -137,7 +137,7 @@ Override it with `\renewcommand` to inject prefixes or styling. The hook receive
 - `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files, `2` for archives.
 - `\DirtreexGetField{#1}{i}` — the raw icon code, empty when omitted; the name field stays unchanged.
 
-A replacement hook controls the entire name, including icon rendering. Save and call the original formatter to retain its icon handling, gap, and directory slash when adding your own decoration.
+A replacement `\\DirtreexFormatName` hook controls the entire name. In `inline` mode, save and call the original formatter to retain its icon handling, gap, and directory slash when adding decoration. In `connector` mode, stored icons are rendered separately through `\\DirtreexFormatIcon`; avoid manually adding the same stored icon in the name hook unless you deliberately want both.
 
 **Example — tag every directory with a `[DIR]` prefix while keeping the default formatter:**
 
@@ -260,6 +260,18 @@ The dotfill options apply to all nonempty comments in that environment. The lead
 Custom leader commands are evaluated in the tree's font at rendering time. Use `\hfill` stretch to preserve comment alignment, and keep the leader within the normal text height. See the comment-leader section of `dirtreex_examples.tex` for a custom dashed pattern.
 
 `icon position=connector` places each stored non-root icon with its centre at the end of the horizontal branch. The icon's height and depth are smashed out of row layout, so custom artwork does not alter the tree's baseline rhythm. The entry name begins after the icon's right edge plus the normal connector-to-name separation. The first root entry remains inline because it has no incoming branch.
+
+For example, a white circular backing and coloured glyph can be supplied without changing `dirtreex`'s layout code:
+
+```latex
+\\renewcommand{\\DirtreexFormatIcon}[1]{%
+  \\tikz[baseline=0pt] \\node[
+    circle, fill=white, draw=none, inner sep=2pt
+  ] {\\textcolor{blue}{\\DirtreexGetField{#1}{i}}};%
+}
+```
+
+The hook receives the entry index, so it can dispatch on entry type or use any custom styling convention.
 
 ### 6.2 The `box` family
 
