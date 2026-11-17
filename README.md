@@ -7,6 +7,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 - **Auto-tracked depth.** Nest `\dir`, `\file`, and `\archive` as deeply as you want; the package derives the depth from the nesting — no per-entry depth argument.
 - **Sharp or rounded elbows**, configurable per tree or per entry via a single `elbow radius` key (`0pt` = sharp, any positive length = rounded arc).
 - **Per-entry overrides** for icons, line colour, line width, line style, and elbow radius.
+- **Flexible icon placement.** Keep icons inline or centre them on branch endpoints; a dedicated hook controls glyph rendering and decoration.
 - **Breakable frame.** The border, background fill, and every pending `│` column continue seamlessly across page boundaries.
 - **CJK-friendly.** Works out of the box with `ctex` + LuaLaTeX.
 - **Zero shell-escape, no external tools, no Python helpers.**
@@ -167,7 +168,7 @@ Swap the bracketed tags for icons from your icon package of choice (`\faFolder`,
 
 **Constraints.** The replacement runs inside the row's name vbox under the body's font. It must respect the row's `\hsize` and leave the caller's `\strut` intact; anything that adds vertical material (for example a `\parbox` with its own depth) will pull the entry's connector out of alignment.
 
-**Stability.** `\DirtreexFormatName`'s single-argument convention and the `\DirtreexGetField` accessors for `n` (entry name), `t` (type flag), and `i` (icon code) are committed public surfaces — overrides built around them keep compiling across minor versions. Other slot keys exist internally but are not part of the public surface and may change.
+**Stability.** `\DirtreexFormatName` and `\DirtreexFormatIcon` use a single entry-index argument. The `\DirtreexGetField` accessors for `n` (entry name), `t` (type flag), and `i` (icon code) are committed public surfaces — overrides built around them keep compiling across minor versions. Other slot keys exist internally but are not part of the public surface and may change.
 
 ---
 
