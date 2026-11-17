@@ -76,6 +76,7 @@
 \newdimen\dte@ptE         % pass-through radius; no connector-stem cap
 \newdimen\dte@ptRaise     % pass-through upper-half raise
 \newdimen\dte@ptH         % pass-through vrule height scratch
+\newdimen\dte@ptPhase     % dash phase measured from the first row
 \newdimen\dte@scratch     % general-purpose allocated scratch dimen
 \newcount\dte@scratchcnt  % general-purpose allocated scratch count
 \newdimen\dte@leader@dim  % leader space prepended to every non-first piece
@@ -533,7 +534,7 @@
 %% \dte@drawvert{raise}{height}{depth}{colour}{width}{style macro}.
 %% Literal solid uses rules; other styles use the shared TikZ adapter.
 %% Pin height/depth to dimension literals before coordinate parsing.
-\def\dte@drawvert#1#2#3#4#5#6{%
+\def\dte@drawvert#1#2#3#4#5#6#7{%
   \ifx#6\dte@ls@solid
     \raise#1\hbox{%
       {\color{#4}%
@@ -550,8 +551,13 @@
       \raise#1\hbox{%
         \tikz[baseline=0pt]{%
           \useasboundingbox (0pt,-\dte@dv@D) rectangle (0pt,\dte@dv@H);%
-          \draw[#4,line width=#5,line cap=butt,/tikz/dte@line style=#6]
-            (0pt,-\dte@dv@D) -- (0pt,\dte@dv@H);%
+          % All pass-through pieces are drawn top-to-bottom. Their dash phase
+          % is measured from the first row, so adjacent row fragments continue
+          % the same pattern instead of restarting and stamping a dot at each
+          % join. Apply the phase after the delegated style to keep it effective.
+          \draw[#4,line width=#5,line cap=butt,
+                /tikz/dte@line style=#6,dash phase=#7]
+            (0pt,\dte@dv@H) -- (0pt,-\dte@dv@D);%
         }%
       }%
     \endgroup
@@ -692,32 +698,50 @@
       \advance\dte@ptRaise by\dte@ptE\relax
       \dte@ptH=0.5\baselineskip
       \advance\dte@ptH by-\dte@ptE\relax
+      % Phase at the upper segment's top endpoint, measured down from row 1.
+      \dte@ptPhase=\csname dte@pos@#1\endcsname\relax
+      \advance\dte@ptPhase by-\csname dte@pos@1\endcsname\relax
+      \advance\dte@ptPhase by 0.7\baselineskip
+      \advance\dte@ptPhase by-\dte@ptRaise
+      \advance\dte@ptPhase by-\dte@ptH
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
           \dte@drawvert{\dte@ptRaise}{\dte@ptH}{0pt}%
             {\dte@pt@own@lc}{\dte@pt@own@lw}{\dte@pt@own@ls}%
+            {\the\dte@ptPhase}%
           \hss
         }%
         \hss
       }%
       \dte@ptH=0.2\baselineskip
       \advance\dte@ptH by\dte@ptE\relax
+      % Continue the phase at the lower segment's top endpoint.
+      \dte@ptPhase=\csname dte@pos@#1\endcsname\relax
+      \advance\dte@ptPhase by-\csname dte@pos@1\endcsname\relax
+      \advance\dte@ptPhase by 0.7\baselineskip
+      \advance\dte@ptPhase by-\dte@ptH
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
           \dte@drawvert{0pt}{\dte@ptH}{\dte@ptD}%
             {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
+            {\the\dte@ptPhase}%
           \hss
         }%
         \hss
       }%
     \else
+      % This full-height fragment starts at the same relative top position
+      % in each row; its phase is therefore the row's offset from row 1.
+      \dte@ptPhase=\csname dte@pos@#1\endcsname\relax
+      \advance\dte@ptPhase by-\csname dte@pos@1\endcsname\relax
       \hbox to 0pt{%
         \kern\dte@tempdim\relax
         \hbox to 0pt{%
           \dte@drawvert{0pt}{0.7\baselineskip}{\dte@ptD}%
             {\dte@pt@lc}{\dte@pt@lw}{\dte@pt@ls}%
+            {\the\dte@ptPhase}%
           \hss
         }%
         \hss
