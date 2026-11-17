@@ -708,7 +708,8 @@
     \begin{scope}
       \clip ([yshift=\dte@trunk@child@ys]dte@content.north west)
         rectangle ([yshift=\dte@trunk@prev@ys]dte@content.north east);
-      \draw[\dte@trunk@lc,line width=\dte@trunk@lw,line cap=butt,
+      %% Round caps turn the short dotted dashes into circular dots.
+      \draw[\dte@trunk@lc,line width=\dte@trunk@lw,line cap=round,
             /tikz/dte@line style=\dte@trunk@ls]
         ([xshift=\dte@trunkX,yshift=\dte@trunk@parent@ys]dte@content.north west)
         --
