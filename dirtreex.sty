@@ -519,23 +519,9 @@
     \hbox{\DirtreexFormatIcon{#1}}\nobreak\hspace{0.5em}%
   \fi
 }
-\def\dte@format@rooticon#1{%
-  \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
-  \ifdim\wd\dte@iconbox>0pt
-    %% The root has no incoming branch. Its icon is a normal-width box whose
-    %% centre is shifted back from the first branch endpoint to the trunk.
-    \kern-\dte@width
-    \kern-0.5\wd\dte@iconbox
-    \dte@iconraise=0.2\baselineskip
-    \advance\dte@iconraise by-0.5\ht\dte@iconbox
-    \advance\dte@iconraise by 0.5\dp\dte@iconbox
-    \smash{\raise\dte@iconraise\copy\dte@iconbox}%
-    \kern\dte@sep
-  \fi
-}
 \newcommand{\DirtreexFormatName}[1]{%
   \ifx\dte@iconposition\dte@iconposition@connector
-    \ifnum#1=1 \dte@format@rooticon{#1}\fi
+    %% Connector mode emits every icon in the row placement hook.
   \else
     \dte@format@inlineicon{#1}%
   \fi
@@ -551,11 +537,13 @@
 %% Smashing the overlay keeps icon artwork from changing row baselines.
 \def\dte@place@connectoricon#1{%
   \ifx\dte@iconposition\dte@iconposition@connector
-    \ifnum#1=1\else
     \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
     \ifdim\wd\dte@iconbox>0pt
-      %% The branch painter is smashed in a local box, so compute its
-      %% fixed 0.2-baseline raise here rather than reading its scratch register.
+      %% The root has no incoming branch: its anchor is one branch-width
+      %% to the left, at the vertical trunk origin. Other icons use the
+      %% horizontal branch endpoint.
+      \ifnum#1=1 \kern-\dte@width\relax\fi
+      %% Compute the raise locally; connector painters use their own scratch.
       \dte@iconraise=0.2\baselineskip\relax
       \advance\dte@iconraise by-0.5\ht\dte@iconbox
       \advance\dte@iconraise by 0.5\dp\dte@iconbox
@@ -565,7 +553,6 @@
         \hss
       }}%
       \kern0.5\wd\dte@iconbox
-    \fi
     \fi
   \fi
   \kern\dte@sep
