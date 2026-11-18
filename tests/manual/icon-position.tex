@@ -1,0 +1,121 @@
+% Manual smoke test for inline and connector-relative icon placement.
+% Compile three times so zref page locations settle:
+%   lualatex icon-position.tex
+%   lualatex icon-position.tex
+\documentclass[a4paper,11pt]{article}
+\usepackage{xcolor}
+\usepackage{dirtreex}
+\pagestyle{empty}
+
+% The icon is measured and centred by dirtreex. This hook supplies only the
+% glyph presentation: a borderless white circle with a coloured glyph.
+\renewcommand{\DirtreexFormatIcon}[1]{%
+  \tikz[baseline=0pt] \node[
+    circle, fill=white, draw=none, inner sep=2pt
+  ] {\textcolor{blue}{\DirtreexGetField{#1}{i}}};%
+}
+
+\begin{document}
+\section*{Inline (backwards-compatible) placement}
+\begin{dirtreex}[icon position=inline, line style=dotted]
+  \dir[icon={\textbf{R}}]{inline-root}{inline mode}{
+    \dir[icon={\textbf{D}}]{src}{source}{
+      \file[icon={\textbf{C}}]{main.c}{entry point}
+      \file[icon={\textbf{C}}]{dat.c}{data abstraction}
+    }
+    \file[icon={\textbf{F}}]{README.md}{documentation}
+  }
+\end{dirtreex}
+
+\section*{Connector-relative placement (multipage)}
+\begin{dirtreex}[
+  icon position=connector,
+  line style=dotted,
+  elbow radius=2pt,
+  box=false
+]
+  \dir[icon={\textbf{R}}]{connector-root}{multipage root}{
+    \dir[icon={\textbf{D}}]{src}{source}{
+      \dir[icon={\textbf{D}}]{lib}{library}{
+        \file[icon={\textbf{C}}]{dat.c}{data abstraction}
+        \file[icon={\textbf{C}}]{dat.h}{data interface}
+      }
+      \file[icon={\textbf{C}}]{main.c}{entry point}
+    }
+    \dir[icon={\textbf{D}}]{docs}{documentation}{
+    \file[icon={\textbf{F}}]{entry-001.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-002.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-003.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-004.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-005.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-006.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-007.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-008.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-009.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-010.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-011.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-012.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-013.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-014.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-015.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-016.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-017.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-018.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-019.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-020.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-021.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-022.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-023.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-024.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-025.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-026.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-027.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-028.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-029.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-030.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-031.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-032.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-033.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-034.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-035.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-036.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-037.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-038.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-039.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-040.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-041.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-042.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-043.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-044.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-045.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-046.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-047.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-048.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-049.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-050.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-051.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-052.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-053.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-054.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-055.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-056.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-057.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-058.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-059.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-060.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-061.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-062.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-063.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-064.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-065.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-066.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-067.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-068.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-069.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-070.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-071.txt}{multipage test row}
+    \file[icon={\textbf{F}}]{entry-072.txt}{multipage test row}
+    }
+  }
+\end{dirtreex}
+\end{document}

@@ -92,6 +92,8 @@
 \newbox\dte@splitresult   % selected rows, or a cached whole picture before dispatch
 \newbox\dte@extbox        % trial remainder while measuring a split piece
 \newbox\dte@bodybox       % discardable env-body capture; never unboxed
+\newbox\dte@iconbox       % measured icon for connector-relative placement
+\newdimen\dte@iconraise   % vertical offset centring the icon on its branch
 
 %% ============================================================
 %%  Style defaults
@@ -103,6 +105,10 @@
 %% xcolor blending or masking to it.
 \def\dte@dotfillcolor{}
 \def\dte@dotfillcommand{\dotfill}
+%% Inline is the backwards-compatible default; connector mode anchors icons
+%% at the centre of each branch endpoint.
+\def\dte@iconposition{inline}
+\def\dte@iconposition@connector{connector}
 
 \def\dte@bordercolor{black}
 \def\dte@borderwidth{0.4pt}
@@ -176,6 +182,10 @@
 \pgfkeys{
   /dte/.cd,
   fontsize/.code={\def\dte@fontsize{#1}},
+  %% --- entry icon placement ---
+  icon position/.is choice,
+  icon position/inline/.code={\def\dte@iconposition{inline}},
+  icon position/connector/.code={\def\dte@iconposition{connector}},
   %% --- comment leaders ---
   dotfill color/.code={\def\dte@dotfillcolor{\color{#1}}},
   dotfill command/.store in=\dte@dotfillcommand,
@@ -501,15 +511,62 @@
 %% Public formatter: #1 is the entry index; accessor arguments are index/field.
 %% The single-argument formatter and n/t/i fields are stable across minor versions.
 %% Overrides run under textstyle inside the name vbox; respect its hsize/strut.
-\newcommand{\DirtreexFormatName}[1]{%
+%% Public icon hook. The default emits captured icon tokens unchanged;
+%% applications may wrap them in a background, colour or other decoration.
+\newcommand{\DirtreexFormatIcon}[1]{\dte@eget{#1}{i}}
+\def\dte@format@inlineicon#1{%
   \expandafter\ifx\csname dte@e#1i\endcsname\@empty\else
-    \hbox{\dte@eget{#1}{i}}\nobreak\hspace{0.5em}%
+    \hbox{\DirtreexFormatIcon{#1}}\nobreak\hspace{0.5em}%
+  \fi
+}
+\def\dte@format@rooticon#1{%
+  \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
+  \ifdim\wd\dte@iconbox>0pt
+    %% Root rows use a dedicated renderer, without a branch placement hook.
+    %% Centre the icon on the trunk gutter and let its box advance the name.
+    \kern\dte@offset
+    \kern-0.5\wd\dte@iconbox
+    \dte@iconraise=0.2\baselineskip
+    \advance\dte@iconraise by-0.5\ht\dte@iconbox
+    \advance\dte@iconraise by 0.5\dp\dte@iconbox
+    \smash{\raise\dte@iconraise\copy\dte@iconbox}%
+    \kern\dte@sep
+  \fi
+}
+\newcommand{\DirtreexFormatName}[1]{%
+  \ifx\dte@iconposition\dte@iconposition@connector
+    \ifnum#1=1 \dte@format@rooticon{#1}\fi
+  \else
+    \dte@format@inlineicon{#1}%
   \fi
   \dte@eget{#1}{n}%
   \ifnum\dte@eget{#1}{t}=1 /\fi
 }
 \newcommand{\DirtreexGetField}[2]{\dte@eget{#1}{#2}}
 \def\dte@format@name#1{\DirtreexFormatName{#1}}
+
+%% Place a stored icon with its centre on the horizontal connector endpoint.
+%% The zero-width overlay starts half an icon-width to the left of that point;
+%% the following kern reserves its right half plus the normal connector gap.
+%% Smashing the overlay keeps icon artwork from changing row baselines.
+\def\dte@place@connectoricon#1{%
+  \ifx\dte@iconposition\dte@iconposition@connector
+    \setbox\dte@iconbox=\hbox{{\dte@textstyle\DirtreexFormatIcon{#1}}}%
+    \ifdim\wd\dte@iconbox>0pt
+      %% Compute the raise locally; connector painters use their own scratch.
+      \dte@iconraise=0.2\baselineskip\relax
+      \advance\dte@iconraise by-0.5\ht\dte@iconbox
+      \advance\dte@iconraise by 0.5\dp\dte@iconbox
+      \smash{\hbox to 0pt{%
+        \kern-0.5\wd\dte@iconbox
+        \raise\dte@iconraise\copy\dte@iconbox
+        \hss
+      }}%
+      \kern0.5\wd\dte@iconbox
+    \fi
+  \fi
+  \kern\dte@sep
+}
 %% Keep comment tokens unexpanded until emission. Leaders are locally styled
 %% and need fill-order stretch for right alignment. \null keeps the following
 %% \hfill from being discarded after a forced break.
@@ -719,27 +776,66 @@
   \def\dte@trunk@prev{#1}%
 }
 
-%% Paint every logical parent trunk, clipped to this page-piece content box.
-%% The path origin remains the parent baseline even when that point is on a
-%% a previous page, so the dash pattern is identical on every continuation.
-\def\dte@draw@trunks#1{%
+%% Collect only direct children whose connector intervals can intersect the
+%% current piece. Children are ordered by source row: retain the first child
+%% at/after the piece start, all children through the piece end, and one child
+%% beyond it. Stop immediately after that final boundary child; this avoids
+%% recursively replaying the remainder of a large sibling list on every trial.
+\def\dte@collect@piecechildren#1{%
+  \ifx#1\@empty\else
+    \expandafter\dte@collect@piecechildren@loop#1,0,\dte@collect@piecechildren@stop
+  \fi
+}
+\def\dte@collect@piecechildren@loop#1,{%
+  \let\dte@collect@piecechildren@next\relax
+  \ifnum#1>0\relax
+    \ifnum#1<\dte@trunk@start\relax
+      \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
+    \else
+      \ifx\dte@trunk@visiblechildren\@empty
+        \edef\dte@trunk@visiblechildren{#1}%
+      \else
+        \edef\dte@trunk@visiblechildren{\dte@trunk@visiblechildren,#1}%
+      \fi
+      \ifnum#1>\dte@trunk@pieceend\relax
+        \let\dte@collect@piecechildren@next\dte@collect@piecechildren@gobble
+      \else
+        \let\dte@collect@piecechildren@next\dte@collect@piecechildren@loop
+      \fi
+    \fi
+  \else
+    \let\dte@collect@piecechildren@next\dte@collect@piecechildren@stopconsume
+  \fi
+  \dte@collect@piecechildren@next
+}
+\def\dte@collect@piecechildren@gobble#1\dte@collect@piecechildren@stop{}
+\def\dte@collect@piecechildren@stopconsume#1{}
+ 
+%% Paint logical parent trunks clipped to the current page-piece content box.
+%% Only branch intervals intersecting this piece are converted into TikZ paths.
+\def\dte@draw@trunks#1#2{%
   \edef\dte@trunk@start{#1}%
+  \edef\dte@trunk@pieceend{#2}%
   \begingroup
     \pgfinterruptboundingbox
     \begin{scope}[on background layer]
       \clip (dte@content.north west) rectangle (dte@content.south east);
       \dte@i=1\relax
-      \loop\ifnum\dte@i<\numexpr\dte@cnt+1\relax
+      \loop\ifnum\dte@i<\numexpr\dte@trunk@pieceend+1\relax
         \edef\dte@trunk@parent{\the\dte@i}%
         \edef\dte@trunk@children{\dte@safeget{dte@children@\the\dte@i}}%
         \ifx\dte@trunk@children\@empty\else
-          \dte@trunkParentY=\dimexpr
-            -\dte@trunkLeader-0.7\baselineskip
-            -\csname dte@pos@\dte@trunk@parent\endcsname
-            +\csname dte@pos@\dte@trunk@start\endcsname
-          \relax
-          \def\dte@trunk@prev{\dte@trunk@parent}%
-          \dte@foreach@owner\dte@trunk@children\dte@draw@trunkchild
+          \def\dte@trunk@visiblechildren{}%
+          \dte@collect@piecechildren\dte@trunk@children
+          \ifx\dte@trunk@visiblechildren\@empty\else
+            \dte@trunkParentY=\dimexpr
+              -\dte@trunkLeader-0.7\baselineskip
+              -\csname dte@pos@\dte@trunk@parent\endcsname
+              +\csname dte@pos@\dte@trunk@start\endcsname
+            \relax
+            \def\dte@trunk@prev{\dte@trunk@parent}%
+            \dte@foreach@owner\dte@trunk@visiblechildren\dte@draw@trunkchild
+          \fi
         \fi
         \advance\dte@i by 1\relax
       \repeat
@@ -749,19 +845,28 @@
 }
 
 %% First page piece starts at entry 1; continuations start after the previous
-%% committed break index. If previous-run locations are unavailable, defer
-%% continuation trunks until the normal rerun has populated breakidx.
+%% committed break index. The current break index also bounds path selection.
+%% If previous-run locations are unavailable, defer continuation trunks until
+%% the normal rerun has populated breakidx.
 \def\dte@draw@trunks@piece{%
   \ifnum\dte@piecenum=1\relax
     \dte@trunkLeader=0pt\relax
-    \dte@draw@trunks{1}%
+    \def\dte@trunk@start{1}%
   \else
     \edef\dte@trunk@prevbreak{\dte@safeget{dte@breakidx@\the\numexpr\dte@piecenum-1\relax}}%
-    \ifx\dte@trunk@prevbreak\@empty\else
+    \ifx\dte@trunk@prevbreak\@empty
+      \let\dte@trunk@start\@empty
+    \else
       \dte@trunkLeader=\dte@leader@dim\relax
       \edef\dte@trunk@start{\the\numexpr\dte@trunk@prevbreak+1\relax}%
-      \expandafter\dte@draw@trunks\expandafter{\dte@trunk@start}%
     \fi
+  \fi
+  \ifx\dte@trunk@start\@empty\else
+    \edef\dte@trunk@pieceend{\dte@safeget{dte@breakidx@\the\dte@piecenum}}%
+    \ifx\dte@trunk@pieceend\@empty
+      \edef\dte@trunk@pieceend{\the\dte@cnt}%
+    \fi
+    \dte@draw@trunks{\dte@trunk@start}{\dte@trunk@pieceend}%
   \fi
 }
 %% The rounded branch-only connector is defined with the other branch painters
@@ -1012,7 +1117,7 @@
   \fi
   \dte@resolve@style{#1}%
   \dte@draw@connector{#1}%
-  \kern\dte@sep
+  \dte@place@connectoricon{#1}%
   \box\dte@tbox
   \endgraf
 }
@@ -1125,7 +1230,7 @@
       \dte@wholeframe@path;
     \end{scope}
     \dte@trunkLeader=0pt\relax
-    \dte@draw@trunks{1}%
+    \dte@draw@trunks{1}{\the\dte@cnt}%
     \draw[\dte@bordercolor,line width=\dte@borderwidth]
       \dte@wholeframe@path;
   \end{tikzpicture}\par
@@ -1139,7 +1244,7 @@
           anchor=north west,
          ] (dte@content) {\box\dte@framebox};
     \dte@trunkLeader=0pt\relax
-    \dte@draw@trunks{1}%
+    \dte@draw@trunks{1}{\the\dte@cnt}%
   \end{tikzpicture}\par
 }
 

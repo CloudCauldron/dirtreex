@@ -7,6 +7,7 @@ A self-contained LaTeX package for rendering directory trees inside an optionall
 - **Auto-tracked depth.** Nest `\dir`, `\file`, and `\archive` as deeply as you want; the package derives the depth from the nesting — no per-entry depth argument.
 - **Sharp or rounded elbows**, configurable per tree or per entry via a single `elbow radius` key (`0pt` = sharp, any positive length = rounded arc).
 - **Per-entry overrides** for icons, line colour, line width, line style, and elbow radius.
+- **Flexible icon placement.** Keep icons inline or centre them on branch endpoints; a dedicated hook controls glyph rendering and decoration.
 - **Breakable frame.** The border, background fill, and every pending `│` column continue seamlessly across page boundaries.
 - **CJK-friendly.** Works out of the box with `ctex` + LuaLaTeX.
 - **Zero shell-escape, no external tools, no Python helpers.**
@@ -129,15 +130,15 @@ Simply place several `dirtreex` environments back-to-back. Each environment has 
 
 ### 4.4 Customising entry-name typesetting (`\DirtreexFormatName`)
 
-`\DirtreexFormatName` is a public hook that controls how each entry name is typeset. The default formatter prints the optional icon with a nonbreaking `0.5em` gap, then the stored name plus a trailing `/` for directories. An omitted or empty `icon={}` adds no prefix or gap.
+`\DirtreexFormatName` is a public hook that controls how each entry name is typeset. The default formatter prints the optional icon with a nonbreaking `0.5em` gap in `icon position=inline` mode, then the stored name plus a trailing `/` for directories. In `connector` mode, every stored icon is positioned relative to the connector geometry: the root icon is centred on the vertical trunk origin, and each subsequent icon is centred on its horizontal branch endpoint. An omitted or empty `icon={}` adds no prefix or gap.
 
-Override it with `\renewcommand` to inject icons, prefixes, or styling. The hook receives the 1-based entry index as `#1`, and `\DirtreexGetField{idx}{slot}` reads any stored field for that index:
+Override it with `\renewcommand` to inject prefixes or styling. The hook receives the 1-based entry index as `#1`, and `\DirtreexGetField{idx}{slot}` reads any stored field for that index. `\DirtreexFormatIcon{#1}` is a separate public hook for rendering the stored icon; its default implementation emits the captured icon code unchanged. Override that hook to add backgrounds, colours or other decoration:
 
 - `\DirtreexGetField{#1}{n}` — the entry name (the first mandatory argument of `\dir` / `\file` / `\archive`).
 - `\DirtreexGetField{#1}{t}` — `1` for directories, `0` for files, `2` for archives.
 - `\DirtreexGetField{#1}{i}` — the raw icon code, empty when omitted; the name field stays unchanged.
 
-A replacement hook controls the entire name, including icon rendering. Save and call the original formatter to retain its icon handling, gap, and directory slash when adding your own decoration.
+A replacement `\DirtreexFormatName` hook controls the entire name. In `inline` mode, save and call the original formatter to retain its icon handling, gap, and directory slash when adding decoration. In `connector` mode, stored icons are rendered separately through `\DirtreexFormatIcon`; avoid manually adding the same stored icon in the name hook unless you deliberately want both.
 
 **Example — tag every directory with a `[DIR]` prefix while keeping the default formatter:**
 
@@ -167,7 +168,7 @@ Swap the bracketed tags for icons from your icon package of choice (`\faFolder`,
 
 **Constraints.** The replacement runs inside the row's name vbox under the body's font. It must respect the row's `\hsize` and leave the caller's `\strut` intact; anything that adds vertical material (for example a `\parbox` with its own depth) will pull the entry's connector out of alignment.
 
-**Stability.** `\DirtreexFormatName`'s single-argument convention and the `\DirtreexGetField` accessors for `n` (entry name), `t` (type flag), and `i` (icon code) are committed public surfaces — overrides built around them keep compiling across minor versions. Other slot keys exist internally but are not part of the public surface and may change.
+**Stability.** `\DirtreexFormatName` and `\DirtreexFormatIcon` use a single entry-index argument. The `\DirtreexGetField` accessors for `n` (entry name), `t` (type flag), and `i` (icon code) are committed public surfaces — overrides built around them keep compiling across minor versions. Other slot keys exist internally but are not part of the public surface and may change.
 
 ---
 
@@ -233,6 +234,7 @@ Options go inside `[...]` on `\begin{dirtreex}` and are parsed with `pgfkeys`. S
 | Key | Default | Meaning |
 | :--- | :--- | :--- |
 | `fontsize` | `\small` | Size command applied to the tree body. Use any length-free size macro: `\tiny`, `\small`, `\normalsize`, …, `\Large`. |
+| `icon position` | `inline` | `inline` prints each icon before its name (the historical behavior); `connector` centres the root icon on the vertical trunk origin and each subsequent icon on its horizontal branch endpoint. |
 | `dotfill color` | inherited | Colour of the leader between an entry name and its comment. Accepts an `xcolor` expression; inherits the current text colour when omitted. |
 | `dotfill command` | `\dotfill` | TeX code that fills the gap before a comment. Use `\hrulefill` for a solid rule, `\hfill` for a blank gap, or a custom leader with `\hfill` stretch. |
 | `line color` | `black` | Default colour for connectors and cross-page extensions. Accepts any `xcolor` expression. |
@@ -257,6 +259,20 @@ The dotfill options apply to all nonempty comments in that environment. The lead
 ```
 
 Custom leader commands are evaluated in the tree's font at rendering time. Use `\hfill` stretch to preserve comment alignment, and keep the leader within the normal text height. See the comment-leader section of `dirtreex_examples.tex` for a custom dashed pattern.
+
+`icon position=connector` places the root icon with its centre at the origin of the vertical trunk, and each subsequent icon with its centre at the end of its horizontal branch. The icon's height and depth are smashed out of row layout, so custom artwork does not alter the tree's baseline rhythm. The entry name begins after the icon's right edge plus the normal connector-to-name separation.
+
+For example, a white circular backing and coloured glyph can be supplied without changing `dirtreex`'s layout code:
+
+```latex
+\\renewcommand{\DirtreexFormatIcon}[1]{%
+  \\tikz[baseline=0pt] \\node[
+    circle, fill=white, draw=none, inner sep=2pt
+  ] {\\textcolor{blue}{\\DirtreexGetField{#1}{i}}};%
+}
+```
+
+The hook receives the entry index, so it can dispatch on entry type or use any custom styling convention.
 
 ### 6.2 The `box` family
 
@@ -293,7 +309,7 @@ Example:
 
 ### 6.4 Per-entry overrides
 
-All six entry commands accept `icon={...}` to print inline TeX content before that entry's name using the default name formatter. Icons are specific to each entry: children and siblings start without an icon. The code is stored unexpanded and rendered in a local horizontal box, so ordinary font and colour declarations affect only the icon. A nonbreaking `0.5em` gap follows a nonempty icon; omitting the option or using `icon={}` adds no gap.
+All six entry commands accept `icon={...}` to store TeX content for that entry. Icons are specific to each entry: children and siblings start without an icon. The code is stored unexpanded. In the default `inline` mode it is rendered before the name with a nonbreaking `0.5em` gap; in `connector` mode it is rendered at the branch endpoint by `\DirtreexFormatIcon`, with the entry name following the icon. Omitting the option or using `icon={}` adds no icon or gap.
 
 ```latex
 \begin{dirtreex}
